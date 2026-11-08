@@ -27,7 +27,8 @@ def create_app(service: PlanningService):
     app = FastAPI(title="Canchero")
     _plans: dict[str, object] = {}       # cache en memoria de la sesión web
     _sessions: dict[str, object] = {}
-    _state: dict[str, str] = {"active_plan_id": ""}  # último plan creado/abierto
+    _session_order: list[str] = []       # historial de sesiones (orden)
+    _state: dict[str, str] = {"active_plan_id": "", "active_category": ""}
 
     # Sirve los archivos estáticos (logo Canchero, favicon) desde app/interface/static
     import os
@@ -50,12 +51,14 @@ def create_app(service: PlanningService):
     @app.get("/", response_class=HTMLResponse)
     def home():
         history = service.repo.list_history()
-        return render_home(history, list_models(), list_formats())
+        llm_on = bool(getattr(service.llm, "is_enabled", lambda: False)())
+        return render_home(history, list_models(), list_formats(), llm_on=llm_on)
 
     # Lógica de creación de plan — compartida por POST y GET (GET para entornos
     # con proxy/CDN que bloquean POST de formularios, p. ej. CloudFront).
     def _do_create_plan(duration_weeks, training_days_per_week, matches_per_week,
-                        model_id, format_id, lang):
+                        model_id, format_id, lang, title="", category=""):
+        plan_title = title.strip() or "Plan de temporada"
         pin = PlanInput(
             season=SeasonParams(
                 start_date="2026-01-06",
@@ -64,6 +67,7 @@ def create_app(service: PlanningService):
                 matches_per_week=int(matches_per_week),
             ),
             model_id=model_id, format_id=format_id, lang=lang,
+            title_es=plan_title, title_en=plan_title,
         )
         res = service.generate_plan(pin)
         if isinstance(res, Err):
@@ -72,54 +76,90 @@ def create_app(service: PlanningService):
         service.repo.save(plan)
         _plans[plan.id] = plan
         _state["active_plan_id"] = plan.id
+        _state["active_category"] = category
         return HTMLResponse(render_plan(plan, lang))
 
     @app.post("/plan", response_class=HTMLResponse)
     def create_plan(
+        title: str = Form(""),
         duration_weeks: int = Form(...),
         training_days_per_week: int = Form(...),
         matches_per_week: int = Form(...),
         model_id: str = Form(...),
         format_id: str = Form(...),
+        category: str = Form(""),
         lang: str = Form("es"),
     ):
         return _do_create_plan(duration_weeks, training_days_per_week,
-                               matches_per_week, model_id, format_id, lang)
+                               matches_per_week, model_id, format_id, lang, title, category)
 
     @app.get("/plan", response_class=HTMLResponse)
     def create_plan_get(
+        title: str = "",
         duration_weeks: int = 20,
         training_days_per_week: int = 4,
         matches_per_week: int = 1,
         model_id: str = "traditional",
         format_id: str = "football_11",
+        category: str = "",
         lang: str = "es",
     ):
         return _do_create_plan(duration_weeks, training_days_per_week,
-                               matches_per_week, model_id, format_id, lang)
+                               matches_per_week, model_id, format_id, lang, title, category)
 
-    def _do_create_session(text, format_id, plan_id, lang):
+    @app.get("/plan/{plan_id}/excel")
+    def export_plan_excel(plan_id: str):
+        plan = _plans.get(plan_id)
+        if plan is None:
+            res = service.repo.load(plan_id)
+            if isinstance(res, Err):
+                return Response(status_code=404)
+            plan = res.value
+        from app.persistence import plan_to_xlsx_bytes
+        data = plan_to_xlsx_bytes(plan)
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="macrociclo-{plan_id}.xlsx"'},
+        )
+
+    @app.get("/plan/{plan_id}", response_class=HTMLResponse)
+    def view_plan(plan_id: str, lang: str = "es"):
+        # Consulta un plan del historial: cache en memoria o disco.
+        plan = _plans.get(plan_id)
+        if plan is None:
+            res = service.repo.load(plan_id)
+            if isinstance(res, Err):
+                return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
+            plan = res.value
+            _plans[plan_id] = plan
+        _state["active_plan_id"] = plan_id  # abrir un plan lo hace activo
+        return HTMLResponse(render_plan(plan, lang))
+
+    def _do_create_session(req_kwargs, plan_id, lang):
         effective_plan_id = plan_id or _state.get("active_plan_id", "")
         macro = None
         if effective_plan_id and effective_plan_id in _plans:
             macro = _plans[effective_plan_id].macro
-        ctx = PlanContext(macro=macro, format_id=format_id, lang=lang)
-        res = service.generate_session(SessionRequest(text=text, format_id=format_id, lang=lang), ctx)
+        # Hereda categoría del plan activo si no se especificó en la sesión.
+        if not req_kwargs.get("category"):
+            req_kwargs["category"] = _state.get("active_category", "")
+        fmt_id = req_kwargs["format_id"]
+        ctx = PlanContext(macro=macro, format_id=fmt_id, lang=lang)
+        res = service.generate_session(SessionRequest(**req_kwargs), ctx)
         if isinstance(res, Err):
             return HTMLResponse(f"<p>Error: {res.error.message_es}</p>", status_code=400)
         doc, alignment = res.value
-        sid = f"{format_id}-{doc.week_index}"
+        sid = f"s{len(_sessions)+1}"
         _sessions[sid] = doc
+        _session_order.append(sid)
         return HTMLResponse(render_session(doc, alignment, lang, pdf_available=is_pdf_available()))
 
-    @app.post("/session", response_class=HTMLResponse)
-    def create_session(
-        text: str = Form(...),
-        format_id: str = Form(...),
-        plan_id: str = Form(""),
-        lang: str = Form("es"),
-    ):
-        return _do_create_session(text, format_id, plan_id, lang)
+    def _int_or(v, default):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
 
     @app.get("/session", response_class=HTMLResponse)
     def create_session_get(
@@ -127,8 +167,27 @@ def create_app(service: PlanningService):
         format_id: str = "football_11",
         plan_id: str = "",
         lang: str = "es",
+        duration_min: str = "90",
+        category: str = "",
+        n_players: str = "",
+        schedule: str = "",
+        phase: str = "",
+        technical_focus: str = "",
+        tactical_focus: str = "",
+        physical_focus: str = "",
+        materials: str = "",
+        week_index: str = "",
     ):
-        return _do_create_session(text, format_id, plan_id, lang)
+        kwargs = dict(
+            text=text, format_id=format_id, lang=lang,
+            duration_min=_int_or(duration_min, 90),
+            category=category, n_players=_int_or(n_players, 0),
+            schedule=schedule, phase=phase,
+            technical_focus=technical_focus, tactical_focus=tactical_focus,
+            physical_focus=physical_focus, materials=materials,
+            week_index=(_int_or(week_index, 0) or None),
+        )
+        return _do_create_session(kwargs, plan_id, lang)
 
     @app.get("/session/{sid}/print", response_class=HTMLResponse)
     def print_session(sid: str, lang: str = "es"):

@@ -30,6 +30,13 @@ class SessionDoc:
     exercises: tuple[Exercise, ...]
     svgs: tuple[str, ...] = ()     # SVG pre-renderizados (U3), opcional
     individual_goals: tuple[dict, ...] = ()  # enlaza a U6 (dict ligero por ahora)
+    # Sesión rica generada por LLM (bloques narrativos). Vacío si fue determinista.
+    rich_blocks: tuple[dict, ...] = ()
+    source: str = "deterministic"  # "deterministic" | "llm"
+    objective_specific: str = ""
+    adaptation_notes: str = ""
+    duration_min: int = 0
+    category: str = ""
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,12 @@ def _session_to_dict(s: SessionDoc) -> dict:
         "exercises": [exercise_to_dict(e) for e in s.exercises],
         "svgs": list(s.svgs),
         "individual_goals": list(s.individual_goals),
+        "rich_blocks": list(s.rich_blocks),
+        "source": s.source,
+        "objective_specific": s.objective_specific,
+        "adaptation_notes": s.adaptation_notes,
+        "duration_min": s.duration_min,
+        "category": s.category,
     }
 
 
@@ -99,6 +112,12 @@ def _session_from_dict(d: dict) -> SessionDoc:
         exercises=tuple(exercise_from_dict(e) for e in d["exercises"]),
         svgs=tuple(d["svgs"]),
         individual_goals=tuple(d["individual_goals"]),
+        rich_blocks=tuple(d.get("rich_blocks", ())),
+        source=d.get("source", "deterministic"),
+        objective_specific=d.get("objective_specific", ""),
+        adaptation_notes=d.get("adaptation_notes", ""),
+        duration_min=d.get("duration_min", 0),
+        category=d.get("category", ""),
     )
 
 

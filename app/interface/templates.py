@@ -111,51 +111,81 @@ def _page(title: str, lang: str, body: str, subtitle: str = "") -> str:
 <div class="wrap">{body}</div></body></html>"""
 
 
-def render_home(history, models, formats, lang: str = "es") -> str:
+_CATEGORIES = ["", "Sub-13", "Sub-15", "Sub-17", "Sub-19", "Sub-23", "Libre", "Primer equipo"]
+
+
+def render_home(history, models, formats, lang: str = "es", llm_on: bool = False) -> str:
     model_opts = "".join(f'<option value="{m.id}">{m.name.es}</option>' for m in models)
     fmt_opts = "".join(f'<option value="{f.id}">{f.name.es}</option>' for f in formats)
+    cat_opts = "".join(f'<option value="{c}">{c or "— sin especificar —"}</option>' for c in _CATEGORIES)
     rows = "".join(
-        f"<li><b>{h.title_es}</b> <span class='muted'>· {h.model_id} / {h.format_id} · {h.created_at}</span></li>"
+        f'<li><a class="back" href="/plan/{h.id}"><b>{h.title_es}</b></a> '
+        f"<span class='muted'>· {h.model_id} / {h.format_id} · {h.created_at[:10]}</span></li>"
         for h in history
-    ) or f"<li class='muted'>{_t('Aún no hay planes. ¡Crea el primero abajo!','No plans yet. Create your first below!',lang)}</li>"
+    ) or "<li class='muted'>Aún no hay planes. ¡Crea el primero abajo!</li>"
+
+    llm_badge = ('<span class="muted">✨ IA activa</span>' if llm_on else
+                 '<span class="muted">IA desactivada — las sesiones usan estructura base. '
+                 'Activa OpenAI/Ollama para sesiones detalladas.</span>')
 
     body = f"""
-<p><a class="btn" href="/roster">👥 {_t('Gestionar equipo y objetivos','Manage team and goals',lang)}</a></p>
+<p><a class="btn" href="/roster">👥 Gestionar equipo y objetivos</a> &nbsp; {llm_badge}</p>
 
 <div class="card">
-  <h2>📋 {_t('Historial de planes','Plan history',lang)}</h2>
+  <h2>📋 Historial de planes</h2>
   <ul class="list">{rows}</ul>
 </div>
 
 <div class="card">
-  <h2>🗓️ {_t('Nuevo plan de temporada','New season plan',lang)}</h2>
+  <h2>🗓️ Nuevo plan de temporada</h2>
   <form method="get" action="/plan">
+    <label>Nombre del plan</label>
+    <input name="title" placeholder="Ej. Temporada 2026 Ciegos" required>
     <div class="row">
-      <div><label>{_t('Semanas','Weeks',lang)}</label><input name="duration_weeks" value="20"></div>
-      <div><label>{_t('Días/semana','Days/week',lang)}</label><input name="training_days_per_week" value="4"></div>
-      <div><label>{_t('Partidos/semana','Matches/week',lang)}</label><input name="matches_per_week" value="1"></div>
+      <div><label>Semanas</label><input name="duration_weeks" value="20"></div>
+      <div><label>Días por semana</label><input name="training_days_per_week" value="4"></div>
+      <div><label>Partidos por semana</label><input name="matches_per_week" value="1"></div>
     </div>
     <div class="row">
-      <div><label>{_t('Modelo de periodización','Periodization model',lang)}</label><select name="model_id">{model_opts}</select></div>
-      <div><label>{_t('Formato de fútbol','Football format',lang)}</label><select name="format_id">{fmt_opts}</select></div>
+      <div><label>Modelo de periodización</label><select name="model_id">{model_opts}</select></div>
+      <div><label>Formato de fútbol</label><select name="format_id">{fmt_opts}</select></div>
+      <div><label>Categoría</label><select name="category">{cat_opts}</select></div>
     </div>
-    <button type="submit">⚡ {_t('Generar plan','Generate plan',lang)}</button>
+    <button type="submit">⚡ Generar plan</button>
   </form>
 </div>
 
 <div class="card">
-  <h2>💬 {_t('Sesión en lenguaje natural','Natural-language session',lang)}</h2>
+  <h2>💬 Nueva sesión</h2>
+  <p class="muted">Describe la sesión en lenguaje natural y afina con las opciones.
+  Entre más contexto des (fundamento, material, categoría), mejor queda. Si hay un
+  plan activo, la sesión se alinea a su microciclo de la semana.</p>
   <form method="get" action="/session">
-    <label>{_t('Describe lo que quieres','Describe what you want',lang)}</label>
-    <input name="text" placeholder="{_t('esta semana quiero una sesión de conducción en espacio reducido','this week I want a driving session in reduced space',lang)}">
-    <div class="row"><div><label>{_t('Formato','Format',lang)}</label><select name="format_id">{fmt_opts}</select></div></div>
+    <label>¿Qué quieres entrenar?</label>
+    <input name="text" placeholder="Ej. sesión de conducción y recepción perfilada en espacio reducido con tiro a puerta" required>
+    <div class="row">
+      <div><label>Formato</label><select name="format_id">{fmt_opts}</select></div>
+      <div><label>Categoría</label><select name="category">{cat_opts}</select></div>
+      <div><label>Duración (min)</label><input name="duration_min" value="90"></div>
+    </div>
+    <div class="row">
+      <div><label>Nº de jugadores</label><input name="n_players" placeholder="según formato"></div>
+      <div><label>Horario</label><input name="schedule" placeholder="matutino / 10:00"></div>
+      <div><label>Semana del plan (opcional)</label><input name="week_index" placeholder="ej. 3"></div>
+    </div>
+    <div class="row">
+      <div><label>Fundamento técnico</label><input name="technical_focus" placeholder="conducción, pase..."></div>
+      <div><label>Fundamento táctico</label><input name="tactical_focus" placeholder="presión, posesión..."></div>
+      <div><label>Capacidad física</label><input name="physical_focus" placeholder="resistencia, velocidad..."></div>
+    </div>
+    <label>Material disponible</label>
+    <input name="materials" placeholder="balones, conos, vallas, balón sonoro, mini-porterías...">
     <input type="hidden" name="plan_id" value="">
-    <button type="submit">✨ {_t('Generar sesión','Generate session',lang)}</button>
+    <button type="submit">✨ Generar sesión</button>
   </form>
 </div>
 """
-    return _page("Canchero", lang, body,
-                 _t("Sí la mueve planificando", "Plays it smart, planning", lang))
+    return _page("Canchero", lang, body, "Sí la mueve planificando")
 
 
 def render_plan(plan, lang: str = "es") -> str:
@@ -172,14 +202,15 @@ def render_plan(plan, lang: str = "es") -> str:
     body = f"""
 <div class="card">
   <h2>🏆 {title}</h2>
-  <p class="muted">{_t('Modelo','Model',lang)}: <b>{plan.macro.model_id}</b> · {_t('Semanas','Weeks',lang)}: <b>{plan.macro.total_weeks}</b> · {_t('Sesiones','Sessions',lang)}: <b>{weeks}</b></p>
+  <p class="muted">Modelo: <b>{plan.macro.model_id}</b> · Semanas: <b>{plan.macro.total_weeks}</b> · Sesiones: <b>{weeks}</b></p>
+  <p><a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar macrociclo a Excel</a></p>
 </div>
 <div class="card">
-  <h2>📅 {_t('Períodos','Periods',lang)}</h2>
+  <h2>📅 Períodos</h2>
   <ul class="list">{periods}</ul>
 </div>
 {_render_mesocycles(plan, lang)}
-<p><a class="back" href="/">← {_t('Inicio','Home',lang)}</a></p>
+<p><a class="back" href="/">← Inicio</a></p>
 """
     return _page(title, lang, body)
 
@@ -313,12 +344,18 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
         Alignment.NONE: _t("⚠ Sin macro — alineación parcial", "⚠ No macro — partial alignment", lang),
     }[alignment]
     color = {"full": "#2e7d32", "partial": "#f9a825", "none": "#c62828"}[alignment.value]
-    inner = to_html_session(doc, lang)
+    from app.persistence.html_export import session_body_html
+    inner = session_body_html(doc, lang)
     pdf_btn = (
         f'<a class="btn" href="/session/{doc.week_index}/pdf">⬇ {_t("Descargar PDF","Download PDF",lang)}</a>'
         if pdf_available else
         f'<span class="muted">{_t("Para PDF: Imprimir → Guardar como PDF","For PDF: Print → Save as PDF",lang)}</span>'
     )
-    banner = f'<div class="banner" style="background:{color}">{align_msg}</div>'
-    body = f'{banner}<div class="card">{inner}</div><p>{pdf_btn} &nbsp; <a class="back" href="/">← {_t("Inicio","Home",lang)}</a></p>'
+    src_badge = ""
+    if getattr(doc, "source", "") == "llm":
+        src_badge = '<span class="muted" style="margin-left:10px">✨ generada con IA</span>'
+    elif getattr(doc, "source", "") == "deterministic":
+        src_badge = '<span class="muted" style="margin-left:10px">estructura base (sin IA)</span>'
+    banner = f'<div class="banner" style="background:{color}">{align_msg}{src_badge}</div>'
+    body = f'{banner}{inner}<p>{pdf_btn} &nbsp; <a class="back" href="/">← {_t("Inicio","Home",lang)}</a></p>'
     return _page(_t("Sesión", "Session", lang), lang, body)

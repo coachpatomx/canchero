@@ -96,6 +96,7 @@ class PlanningService:
                                        detail="semana fuera del macro"))
             doc = self._build_session_doc(micro, meso_index=0, micro_index=micro.week_index - 1,
                                           fmt=fmt, lang=request.lang, intent=intent)
+            doc = self._author_rich(doc, request, fmt, micro)
             doc = self._attach_individual_goals(doc, roster, request.lang)
             return Ok((doc, Alignment.FULL))
 
@@ -103,8 +104,44 @@ class PlanningService:
         # Si se llega aquí sin macro, se genera una sesión suelta marcada 'none'.
         slot = self._synthetic_slot(intent)
         doc = self._assemble(slot, fmt, request.lang, intent, week=0, meso=0, micro=0)
+        doc = self._author_rich(doc, request, fmt, None)
         doc = self._attach_individual_goals(doc, roster, request.lang)
         return Ok((doc, Alignment.NONE))
+
+    def _author_rich(self, doc: SessionDoc, request, fmt, micro):
+        """Si el LLM está activo, enriquece la sesión con bloques narrativos de
+        calidad profesional. Si no, deja la sesión determinista intacta (RF-10)."""
+        if not self.llm.is_enabled():
+            return doc
+        from .session_author import build_prompt, parse_llm_session
+        micro_ctx = {}
+        if micro is not None:
+            slot = micro.session_slots[0] if micro.session_slots else None
+            micro_ctx = {
+                "week": micro.week_index,
+                "micro_type": micro.type.value,
+                "volume": micro.target_volume_pct,
+                "intensity": micro.target_intensity_pct,
+                "phase": slot.micro_phase.value if slot else "stimulating",
+            }
+        prompt = build_prompt(request, fmt, micro_ctx, request.lang)
+        res = self.llm.complete(prompt)
+        if isinstance(res, Err):
+            return doc  # degradación: conserva la determinista
+        data = parse_llm_session(res.value)
+        if not data:
+            return doc
+        blocks = tuple(data.get("bloques", []))
+        return replace(
+            doc,
+            objective=I18nText(data.get("objetivo", doc.objective.es), doc.objective.en),
+            objective_specific=data.get("objetivo_especifico", ""),
+            adaptation_notes=data.get("notas_adaptacion", ""),
+            rich_blocks=blocks,
+            source="llm",
+            duration_min=request.duration_min,
+            category=request.category,
+        )
 
     def _attach_individual_goals(self, doc: SessionDoc, roster, lang: str) -> SessionDoc:
         """Inserta los objetivos individuales de U6 en la sesión (plantilla mejorada)."""
