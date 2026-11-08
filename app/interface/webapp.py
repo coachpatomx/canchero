@@ -16,7 +16,13 @@ from app.planning_service import (
 from periodization_engine import SeasonParams, list_models
 from periodization_engine.errors import Err
 
-from .templates import render_home, render_plan, render_roster, render_session
+from .templates import (
+    render_home,
+    render_plan,
+    render_roster,
+    render_session,
+    render_sessions_history,
+)
 
 
 def create_app(service: PlanningService):
@@ -77,7 +83,7 @@ def create_app(service: PlanningService):
         _plans[plan.id] = plan
         _state["active_plan_id"] = plan.id
         _state["active_category"] = category
-        return HTMLResponse(render_plan(plan, lang))
+        return HTMLResponse(render_plan(plan, lang, service.repo.list_sessions()))
 
     @app.post("/plan", response_class=HTMLResponse)
     def create_plan(
@@ -134,7 +140,7 @@ def create_app(service: PlanningService):
             plan = res.value
             _plans[plan_id] = plan
         _state["active_plan_id"] = plan_id  # abrir un plan lo hace activo
-        return HTMLResponse(render_plan(plan, lang))
+        return HTMLResponse(render_plan(plan, lang, service.repo.list_sessions()))
 
     def _do_create_session(req_kwargs, plan_id, lang):
         effective_plan_id = plan_id or _state.get("active_plan_id", "")
@@ -150,10 +156,12 @@ def create_app(service: PlanningService):
         if isinstance(res, Err):
             return HTMLResponse(f"<p>Error: {res.error.message_es}</p>", status_code=400)
         doc, alignment = res.value
-        sid = f"s{len(_sessions)+1}"
+        # Persistir la sesión en disco (historial de sesiones).
+        sid = service.repo.save_session(doc, plan_id=effective_plan_id)
         _sessions[sid] = doc
         _session_order.append(sid)
-        return HTMLResponse(render_session(doc, alignment, lang, pdf_available=is_pdf_available()))
+        return HTMLResponse(render_session(doc, alignment, lang,
+                                           pdf_available=is_pdf_available(), sid=sid))
 
     def _int_or(v, default):
         try:
@@ -189,12 +197,48 @@ def create_app(service: PlanningService):
         )
         return _do_create_session(kwargs, plan_id, lang)
 
+    def _get_session(sid):
+        doc = _sessions.get(sid)
+        if doc is None:
+            res = service.repo.load_session(sid)
+            if isinstance(res, Err):
+                return None
+            doc = res.value
+            _sessions[sid] = doc
+        return doc
+
     @app.get("/session/{sid}/print", response_class=HTMLResponse)
     def print_session(sid: str, lang: str = "es"):
-        doc = _sessions.get(sid)
+        doc = _get_session(sid)
         if doc is None:
             return HTMLResponse("<p>No encontrada</p>", status_code=404)
         return to_html_session(doc, lang)
+
+    @app.get("/session/{sid}/view", response_class=HTMLResponse)
+    def view_session(sid: str, lang: str = "es"):
+        doc = _get_session(sid)
+        if doc is None:
+            return HTMLResponse("<p>No encontrada</p>", status_code=404)
+        from app.planning_service import Alignment
+        return HTMLResponse(render_session(doc, Alignment.FULL, lang,
+                                           pdf_available=is_pdf_available(), sid=sid))
+
+    @app.get("/session/{sid}/pdf")
+    def pdf_session_route(sid: str, lang: str = "es"):
+        doc = _get_session(sid)
+        if doc is None:
+            return Response(status_code=404)
+        from app.persistence import to_pdf_session
+        res = to_pdf_session(doc, lang)
+        if isinstance(res, Err):
+            return HTMLResponse("<p>PDF nativo no disponible. Usa Imprimir → Guardar como PDF.</p>",
+                                status_code=409)
+        return Response(content=res.value, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="sesion-{sid}.pdf"'})
+
+    @app.get("/sessions", response_class=HTMLResponse)
+    def sessions_history(lang: str = "es"):
+        return HTMLResponse(render_sessions_history(service.repo.list_sessions(), lang))
 
     # ---- gestión de equipo / objetivos (U6) ---- #
     from app.player_tracking import (

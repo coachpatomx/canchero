@@ -36,9 +36,12 @@ class JsonFileRepository:
         self.root = root
         self.plans_dir = os.path.join(root, "plans")
         self.library_dir = os.path.join(root, "library")
+        self.sessions_dir = os.path.join(root, "sessions")
         self.index_path = os.path.join(self.plans_dir, "_index.json")
+        self.sessions_index_path = os.path.join(self.sessions_dir, "_index.json")
         os.makedirs(self.plans_dir, exist_ok=True)
         os.makedirs(self.library_dir, exist_ok=True)
+        os.makedirs(self.sessions_dir, exist_ok=True)
 
     # ---- índice de historial ---- #
     def _read_index(self) -> list[dict]:
@@ -115,3 +118,38 @@ class JsonFileRepository:
             fn[:-5] for fn in os.listdir(self.library_dir)
             if fn.endswith(".json")
         )
+
+    # ---- historial de sesiones ---- #
+    def _read_sessions_index(self) -> list[dict]:
+        if not os.path.exists(self.sessions_index_path):
+            return []
+        with open(self.sessions_index_path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def save_session(self, session, plan_id: str = "") -> str:
+        """Guarda una SessionDoc en disco con un id único. Devuelve el id."""
+        from .plan import _session_to_dict
+        index = self._read_sessions_index()
+        sid = f"sess-{len(index) + 1:05d}"
+        path = os.path.join(self.sessions_dir, f"{sid}.json")
+        _atomic_write(path, _session_to_dict(session))
+        title = session.objective.es or "Sesión"
+        index.append({
+            "id": sid, "plan_id": plan_id, "title": title,
+            "week": session.week_index, "source": getattr(session, "source", ""),
+            "created_at": session.date or "",
+        })
+        _atomic_write(self.sessions_index_path, index)  # type: ignore[arg-type]
+        return sid
+
+    def list_sessions(self) -> list[dict]:
+        return self._read_sessions_index()
+
+    def load_session(self, sid: str):
+        from .plan import _session_from_dict
+        path = os.path.join(self.sessions_dir, f"{sid}.json")
+        if not os.path.exists(path):
+            return Err(DomainError(DomainErrorKind.UNKNOWN_MODEL,
+                                   detail=f"sesión {sid} no encontrada"))
+        with open(path, encoding="utf-8") as f:
+            return Ok(_session_from_dict(json.load(f)))

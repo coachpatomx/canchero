@@ -232,3 +232,11 @@
 **Context**: POST-v1 — tanda de mejoras completada; agente listo para conectar OpenAI cuando el usuario cargue su clave
 
 ---
+
+## POST-v1 - Canchero v2: branding, sesiones LLM, UX completa
+**Timestamp**: 2026-11-08T00:00:00Z
+**User Input**: (sesión larga de iteración de marca y funcionalidad) "si confirmo" (OpenAI); categorías Sub-13..Sub-23 como variable de prompt; agente multi-modalidad no solo ciegos; backlog completo de mejoras; "de una" (cerrar pendientes antes de subir).
+**AI Response**: "Branding: creé la mascota Canchero (maniquí de barrera, ojos bizcos, 4 patas, verde+naranja) en SVG vectorial + PNG (transparente y fondo); la integré como logo/favicon en la app con tema oscuro y fuente Poppins; tagline 'Sí la mueve planificando'. Funcionalidad v2: (1) conector OpenAI real + session_author.py que arma prompt experto (modalidad adaptada, categoría, carga del micro, fundamentos, material) y genera sesión rica en JSON (calentamiento→principal→juego→vuelta a la calma, variantes, materiales, aspectos); SessionDoc ampliado con rich_blocks/source/duration/category; render blanco imprimible. (2) Planes con nombre + categoría. (3) Historial de planes consultable (/plan/{id}). (4) Formulario de sesión con variables (duración, categoría, nº jugadores, horario, fundamentos téc/tác/fís, material, semana) + nota guía. (5) Sesión vinculada al plan activo, hereda categoría. (6) Export macrociclo a Excel .xlsx (stdlib zipfile, formato tipo plantilla del usuario). (7) UI homologada a español. (8) Historial de sesiones persistido en disco (data/sessions/) + vista. (9) Vista de proyecto jerárquico: sesiones del plan agrupadas por semana. Formularios cambiados a GET (compat proxy/CloudFront). Suite: 90 passed. Proyecto subido a GitHub coachpatomx/canchero (commits e13ace0, ba55b0a, af389f6 + v2). Usuario clonó a su Windows (Python 3.15 + Git instalados) y confirmó que corre local y genera planes. Pendiente: que el usuario ponga su OPENAI_API_KEY en .env para sesiones con IA."
+**Context**: POST-v1 — Canchero v2 completa; lista para git pull en la máquina del usuario y conectar OpenAI
+
+---

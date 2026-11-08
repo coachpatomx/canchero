@@ -129,7 +129,8 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
                  'Activa OpenAI/Ollama para sesiones detalladas.</span>')
 
     body = f"""
-<p><a class="btn" href="/roster">👥 Gestionar equipo y objetivos</a> &nbsp; {llm_badge}</p>
+<p><a class="btn" href="/roster">👥 Equipo y objetivos</a> &nbsp;
+   <a class="btn" href="/sessions">📚 Historial de sesiones</a> &nbsp; {llm_badge}</p>
 
 <div class="card">
   <h2>📋 Historial de planes</h2>
@@ -188,7 +189,7 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     return _page("Canchero", lang, body, "Sí la mueve planificando")
 
 
-def render_plan(plan, lang: str = "es") -> str:
+def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> str:
     title = plan.title.es if lang == "es" else plan.title.en
     weeks = len(plan.sessions)
     # Colores por tipo de período para la línea de tiempo.
@@ -210,9 +211,34 @@ def render_plan(plan, lang: str = "es") -> str:
   <ul class="list">{periods}</ul>
 </div>
 {_render_mesocycles(plan, lang)}
+{_render_plan_sessions(plan, plan_sessions or [])}
 <p><a class="back" href="/">← Inicio</a></p>
 """
     return _page(title, lang, body)
+
+
+def _render_plan_sessions(plan, plan_sessions: list) -> str:
+    """Sesiones guardadas de este plan, agrupadas por semana (vista de proyecto)."""
+    mine = [s for s in plan_sessions if s.get("plan_id") == plan.id]
+    if not mine:
+        return (
+            '<div class="card"><h2>📝 Sesiones de este plan</h2>'
+            '<p class="muted">Aún no has generado sesiones para este plan. '
+            'Vuelve al inicio y crea una; se alineará a la semana que elijas.</p></div>'
+        )
+    by_week: dict = {}
+    for s in mine:
+        by_week.setdefault(s.get("week", 0), []).append(s)
+    rows = []
+    for wk in sorted(by_week):
+        items = "".join(
+            f'<li><a class="back" href="/session/{s["id"]}/view">{s.get("title","Sesión")}</a> '
+            f'<span class="muted">· {"✨ IA" if s.get("source")=="llm" else "base"}</span></li>'
+            for s in by_week[wk]
+        )
+        rows.append(f'<li><b>Semana {wk}</b><ul class="list">{items}</ul></li>')
+    return (f'<div class="card"><h2>📝 Sesiones de este plan</h2>'
+            f'<ul class="list">{"".join(rows)}</ul></div>')
 
 
 # Color de barra según intensidad (verde bajo -> naranja medio -> rojo alto).
@@ -337,7 +363,27 @@ def render_roster(roster, lang: str = "es") -> str:
     return _page(_t("Equipo", "Team", lang), lang, body)
 
 
-def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: bool = False) -> str:
+def render_sessions_history(sessions: list, lang: str = "es") -> str:
+    if not sessions:
+        rows = "<li class='muted'>Aún no hay sesiones guardadas.</li>"
+    else:
+        src_label = {"llm": "✨ IA", "deterministic": "base"}
+        rows = "".join(
+            f'<li><a class="back" href="/session/{s["id"]}/view"><b>{s.get("title","Sesión")}</b></a> '
+            f'<span class="muted">· semana {s.get("week","-")} · {src_label.get(s.get("source",""), s.get("source",""))}</span></li>'
+            for s in reversed(sessions)
+        )
+    body = f"""
+<div class="card">
+  <h2>📚 Historial de sesiones</h2>
+  <ul class="list">{rows}</ul>
+</div>
+<p><a class="back" href="/">← Inicio</a></p>
+"""
+    return _page("Sesiones", lang, body, "Historial")
+
+
+def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: bool = False, sid: str = "") -> str:
     align_msg = {
         Alignment.FULL: _t("✓ Alineada al macrociclo vigente", "✓ Aligned to the active macrocycle", lang),
         Alignment.PARTIAL: _t("Macro construido por entrevista", "Macro built via interview", lang),
@@ -346,10 +392,11 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
     color = {"full": "#2e7d32", "partial": "#f9a825", "none": "#c62828"}[alignment.value]
     from app.persistence.html_export import session_body_html
     inner = session_body_html(doc, lang)
+    print_link = f'<a class="btn" href="/session/{sid}/print" target="_blank">🖨️ Imprimir / PDF</a>' if sid else ""
     pdf_btn = (
-        f'<a class="btn" href="/session/{doc.week_index}/pdf">⬇ {_t("Descargar PDF","Download PDF",lang)}</a>'
-        if pdf_available else
-        f'<span class="muted">{_t("Para PDF: Imprimir → Guardar como PDF","For PDF: Print → Save as PDF",lang)}</span>'
+        f'<a class="btn" href="/session/{sid}/pdf">⬇ Descargar PDF</a> {print_link}'
+        if (pdf_available and sid) else
+        f'{print_link} <span class="muted">(desde ahí: Imprimir → Guardar como PDF)</span>'
     )
     src_badge = ""
     if getattr(doc, "source", "") == "llm":
