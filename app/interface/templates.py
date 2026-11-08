@@ -189,21 +189,55 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     return _page("Canchero", lang, body, "Sí la mueve planificando")
 
 
+# Traducciones de dominio a español (el motor usa claves inglesas internas).
+PERIOD_ES = {
+    "preparatory": "Preparatorio", "competitive": "Competitivo", "transition": "Transitorio",
+    "resistance": "Resistencia", "strength": "Fuerza", "speed": "Velocidad", "recovery": "Recuperación",
+}
+STAGE_ES = {
+    "general": "General", "special": "Especial", "precompetitive": "Precompetitiva",
+    "competitive": "Competitiva", "transition": "Transición",
+}
+MESOTYPE_ES = {
+    "base": "Base", "development": "Desarrollo", "stabilization": "Estabilización",
+    "competitive": "Competitivo", "recovery": "Recuperación",
+}
+MICROTYPE_ES = {
+    "introductory": "Introductorio", "developmental": "Desarrollador", "shock": "Choque",
+    "recovery": "Recuperación", "precompetitive": "Precompetitivo", "competition": "Competencia",
+}
+MODEL_ES = {
+    "traditional": "Tradicional (Matveyev)", "blocks": "Por bloques (Issurin)", "atr": "ATR",
+    "tactical": "Periodización Táctica (Frade)", "structured": "Entrenamiento Estructurado (Seirul·lo)",
+    "football_gonzalez": "Esquema A. González (torneos cortos)",
+}
+
+
 def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> str:
     title = plan.title.es if lang == "es" else plan.title.en
     weeks = len(plan.sessions)
     # Colores por tipo de período para la línea de tiempo.
     pcolor = {"preparatory":"#2e7d32","competitive":"#1565c0","transition":"#f9a825",
               "resistance":"#2e7d32","strength":"#6a1b9a","speed":"#c62828","recovery":"#00897b"}
+    # Cada período enlaza (ancla) al primer mesociclo que cae en su rango,
+    # para saltar al detalle al hacer clic.
+    def _meso_anchor_for_week(week):
+        for i, meso in enumerate(plan.macro.mesocycles, start=1):
+            if meso.start_week <= week <= meso.end_week:
+                return f"meso{i}"
+        return ""
     periods = "".join(
-        f'<li><span class="pill" style="background:{pcolor.get(p.kind.value,"#555")}">{p.kind.value}</span> '
-        f'<span class="muted">{p.stage.value} · {_t("sem","wk",lang)} {p.start_week}–{p.end_week}</span></li>'
+        f'<li><a href="#{_meso_anchor_for_week(p.start_week)}" style="text-decoration:none">'
+        f'<span class="pill" style="background:{pcolor.get(p.kind.value,"#555")}">'
+        f'{PERIOD_ES.get(p.kind.value, p.kind.value)}</span></a> '
+        f'<span class="muted">{STAGE_ES.get(p.stage.value, p.stage.value)} · '
+        f'sem {p.start_week}–{p.end_week} · (clic para ver detalle ↓)</span></li>'
         for p in plan.macro.periods
     )
     body = f"""
 <div class="card">
   <h2>🏆 {title}</h2>
-  <p class="muted">Modelo: <b>{plan.macro.model_id}</b> · Semanas: <b>{plan.macro.total_weeks}</b> · Sesiones: <b>{weeks}</b></p>
+  <p class="muted">Modelo: <b>{MODEL_ES.get(plan.macro.model_id, plan.macro.model_id)}</b> · Semanas: <b>{plan.macro.total_weeks}</b> · Sesiones: <b>{weeks}</b></p>
   <p><a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar macrociclo a Excel</a></p>
 </div>
 <div class="card">
@@ -288,8 +322,8 @@ def _render_mesocycles(plan, lang: str = "es") -> str:
             )
         name = mt[0] if lang == "es" else mt[1]
         blocks.append(
-            f'<div class="card"><h2>🔁 {_t("Mesociclo","Mesocycle",lang)} {i} · {name} '
-            f'<span class="muted" style="font-weight:400">({_t("sem","wk",lang)} {meso.start_week}–{meso.end_week})</span></h2>'
+            f'<div class="card" id="meso{i}"><h2>🔁 Mesociclo {i} · {name} '
+            f'<span class="muted" style="font-weight:400">(sem {meso.start_week}–{meso.end_week})</span></h2>'
             f'<ul class="list">{"".join(micro_rows)}</ul></div>'
         )
     return "".join(blocks)

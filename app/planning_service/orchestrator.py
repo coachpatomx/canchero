@@ -125,7 +125,12 @@ class PlanningService:
                 "phase": slot.micro_phase.value if slot else "stimulating",
             }
         prompt = build_prompt(request, fmt, micro_ctx, request.lang)
-        res = self.llm.complete(prompt)
+        # Blindaje: cualquier fallo del LLM (red, saldo, formato) degrada a la
+        # sesión determinista en vez de romper la petición.
+        try:
+            res = self.llm.complete(prompt)
+        except Exception:
+            return doc
         if isinstance(res, Err):
             return doc  # degradación: conserva la determinista
         data = parse_llm_session(res.value)

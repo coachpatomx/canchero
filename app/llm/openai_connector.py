@@ -33,11 +33,15 @@ class OpenAiConnector:
         if not self.is_enabled():
             return Err(DomainError(DomainErrorKind.UNKNOWN_MODEL,
                                    detail="OpenAI no disponible (SDK o clave) | OpenAI unavailable"))
-        from openai import OpenAI  # import perezoso
+        try:
+            from openai import OpenAI  # import perezoso
 
-        client = OpenAI(api_key=cfg.resolve_api_key())
-        resp = client.chat.completions.create(
-            model=cfg.model or "gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return Ok(resp.choices[0].message.content or "")
+            client = OpenAI(api_key=cfg.resolve_api_key())
+            resp = client.chat.completions.create(
+                model=cfg.model or "gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return Ok(resp.choices[0].message.content or "")
+        except Exception as e:  # red, saldo, rate limit, modelo inválido...
+            return Err(DomainError(DomainErrorKind.UNKNOWN_MODEL,
+                                   detail=f"error OpenAI: {type(e).__name__}: {e}"))

@@ -39,9 +39,22 @@ def _rows_for_plan(plan) -> list[list]:
     micros.sort(key=lambda m: m.week_index)
     n = len(micros)
 
+    # Traducciones a español (el motor usa claves inglesas internas).
+    _period_es = {"preparatory": "Preparatorio", "competitive": "Competitivo",
+                  "transition": "Transitorio", "resistance": "Resistencia",
+                  "strength": "Fuerza", "speed": "Velocidad", "recovery": "Recuperación"}
+    _micro_es = {"introductory": "Introductorio", "developmental": "Desarrollador",
+                 "shock": "Choque", "recovery": "Recuperación",
+                 "precompetitive": "Precompetitivo", "competition": "Competencia"}
+    _model_es = {"traditional": "Tradicional (Matveyev)", "blocks": "Por bloques (Issurin)",
+                 "atr": "ATR", "tactical": "Periodización Táctica (Frade)",
+                 "structured": "Entrenamiento Estructurado (Seirul·lo)",
+                 "football_gonzalez": "Esquema A. González"}
+
     rows: list[list] = []
     rows.append([f"MACROCICLO — {plan.title.es}"])
-    rows.append([f"Modelo: {macro.model_id}", f"Semanas: {macro.total_weeks}",
+    rows.append([f"Modelo: {_model_es.get(macro.model_id, macro.model_id)}",
+                 f"Semanas: {macro.total_weeks}",
                  f"Sesiones: {len(plan.sessions)}"])
     rows.append([])
 
@@ -49,7 +62,7 @@ def _rows_for_plan(plan) -> list[list]:
     week_to_period = {}
     for p in macro.periods:
         for w in range(p.start_week, p.end_week + 1):
-            week_to_period[w] = p.kind.value
+            week_to_period[w] = _period_es.get(p.kind.value, p.kind.value)
     rows.append(["Período"] + [week_to_period.get(m.week_index, "") for m in micros])
 
     # Fila de mesociclo índice.
@@ -62,7 +75,7 @@ def _rows_for_plan(plan) -> list[list]:
     # Fila de semana.
     rows.append(["Semana"] + [m.week_index for m in micros])
     # Tipo de microciclo.
-    rows.append(["Tipo microciclo"] + [m.type.value for m in micros])
+    rows.append(["Tipo microciclo"] + [_micro_es.get(m.type.value, m.type.value) for m in micros])
     # Carga: volumen e intensidad.
     rows.append(["Volumen %"] + [m.target_volume_pct for m in micros])
     rows.append(["Intensidad %"] + [m.target_intensity_pct for m in micros])

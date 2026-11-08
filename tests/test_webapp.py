@@ -34,7 +34,7 @@ def test_create_plan_then_aligned_session():
         "format_id": "blind_5",
     })
     assert r.status_code == 200
-    assert "resistance" in r.text  # períodos del modelo González
+    assert "Resistencia" in r.text  # períodos del modelo González (en español)
 
     # Sesión en lenguaje natural: debe alinearse al plan recién creado.
     r2 = c.get("/session", params={

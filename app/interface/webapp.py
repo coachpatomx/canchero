@@ -16,6 +16,11 @@ from app.planning_service import (
 from periodization_engine import SeasonParams, list_models
 from periodization_engine.errors import Err
 
+
+def _esc_html(s: str) -> str:
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
 from .templates import (
     render_home,
     render_plan,
@@ -152,16 +157,29 @@ def create_app(service: PlanningService):
             req_kwargs["category"] = _state.get("active_category", "")
         fmt_id = req_kwargs["format_id"]
         ctx = PlanContext(macro=macro, format_id=fmt_id, lang=lang)
-        res = service.generate_session(SessionRequest(**req_kwargs), ctx)
-        if isinstance(res, Err):
-            return HTMLResponse(f"<p>Error: {res.error.message_es}</p>", status_code=400)
-        doc, alignment = res.value
-        # Persistir la sesión en disco (historial de sesiones).
-        sid = service.repo.save_session(doc, plan_id=effective_plan_id)
-        _sessions[sid] = doc
-        _session_order.append(sid)
-        return HTMLResponse(render_session(doc, alignment, lang,
-                                           pdf_available=is_pdf_available(), sid=sid))
+        try:
+            res = service.generate_session(SessionRequest(**req_kwargs), ctx)
+            if isinstance(res, Err):
+                return HTMLResponse(f"<p>Error: {res.error.message_es}</p>", status_code=400)
+            doc, alignment = res.value
+            # Persistir la sesión en disco (historial de sesiones).
+            sid = service.repo.save_session(doc, plan_id=effective_plan_id)
+            _sessions[sid] = doc
+            _session_order.append(sid)
+            return HTMLResponse(render_session(doc, alignment, lang,
+                                               pdf_available=is_pdf_available(), sid=sid))
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            return HTMLResponse(
+                f"<h3>Ocurrió un error al generar la sesión</h3>"
+                f"<p>El equipo puede revisar el detalle abajo. La planificación "
+                f"determinista no se ve afectada.</p>"
+                f"<pre style='white-space:pre-wrap;background:#161b22;color:#f4f4f0;"
+                f"padding:12px;border-radius:8px'>{_esc_html(str(e))}\n\n{_esc_html(tb)}</pre>"
+                f"<p><a href='/'>← Inicio</a></p>",
+                status_code=500,
+            )
 
     def _int_or(v, default):
         try:
