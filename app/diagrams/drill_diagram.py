@@ -68,6 +68,31 @@ def render_drill(diagram: dict, title: str = "") -> str:
     body = p.rect(0, 0, CANVAS_W, total_h, fill=GRASS, stroke="none")
     body += p.rect(MARGIN, MARGIN, iw, ih, fill=GREEN, stroke="#ffffff", stroke_width=3)
 
+    # ---- Marcas de cancha de fútbol ----
+    cx = MARGIN + iw / 2
+    cy = MARGIN + ih / 2
+    line = "#ffffff"
+    lw = 2
+    # línea media (vertical) + círculo central + punto central
+    body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
+    body += p.circle(cx, cy, min(iw, ih) * 0.14, fill="none", stroke=line, stroke_width=lw)
+    body += p.circle(cx, cy, 3, fill=line, stroke="none")
+    # áreas grande y pequeña + punto de penal, en ambos extremos
+    area_w = iw * 0.09
+    area_h = ih * 0.55
+    ay = MARGIN + (ih - area_h) / 2
+    small_w = iw * 0.035
+    small_h = ih * 0.28
+    sy_ = MARGIN + (ih - small_h) / 2
+    # izquierda
+    body += p.rect(MARGIN, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+    body += p.rect(MARGIN, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
+    body += p.circle(MARGIN + iw * 0.11, cy, 3, fill=line, stroke="none")
+    # derecha
+    body += p.rect(MARGIN + iw - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+    body += p.rect(MARGIN + iw - small_w, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
+    body += p.circle(MARGIN + iw - iw * 0.11, cy, 3, fill=line, stroke="none")
+
     # zonas (fondo)
     for z in diagram.get("zonas", []) or []:
         try:
