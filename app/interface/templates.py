@@ -242,27 +242,55 @@ MODEL_ES = {
 }
 
 
+def _week_bar(m) -> str:
+    vol, inten = m.target_volume_pct, m.target_intensity_pct
+    mt = MICROTYPE_ES.get(m.type.value, m.type.value)
+    return (
+        f'<li><b>Semana {m.week_index}</b> '
+        f'<span class="muted">· {mt} · sesiones: {len(m.session_slots)}</span>'
+        f'<div style="margin-top:6px">'
+        f'<span style="display:inline-block;height:8px;width:{vol}px;max-width:100px;'
+        f'background:#3b82f6;border-radius:4px;vertical-align:middle"></span>'
+        f'<span class="muted" style="margin:0 10px 0 6px">vol {vol}%</span>'
+        f'<span style="display:inline-block;height:8px;width:{inten}px;max-width:100px;'
+        f'background:{_load_color(inten)};border-radius:4px;vertical-align:middle"></span>'
+        f'<span class="muted" style="margin-left:6px">int {inten}%</span>'
+        f'</div></li>'
+    )
+
+
 def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> str:
     title = plan.title.es if lang == "es" else plan.title.en
     weeks = len(plan.sessions)
-    # Colores por tipo de período para la línea de tiempo.
     pcolor = {"preparatory":"#2e7d32","competitive":"#1565c0","transition":"#f9a825",
               "resistance":"#2e7d32","strength":"#6a1b9a","speed":"#c62828","recovery":"#00897b"}
-    # Cada período enlaza (ancla) al primer mesociclo que cae en su rango,
-    # para saltar al detalle al hacer clic.
-    def _meso_anchor_for_week(week):
-        for i, meso in enumerate(plan.macro.mesocycles, start=1):
-            if meso.start_week <= week <= meso.end_week:
-                return f"meso{i}"
-        return ""
-    periods = "".join(
-        f'<li><a href="#{_meso_anchor_for_week(p.start_week)}" style="text-decoration:none">'
-        f'<span class="pill" style="background:{pcolor.get(p.kind.value,"#555")}">'
-        f'{PERIOD_ES.get(p.kind.value, p.kind.value)}</span></a> '
-        f'<span class="muted">{STAGE_ES.get(p.stage.value, p.stage.value)} · '
-        f'sem {p.start_week}–{p.end_week} · (clic para ver detalle ↓)</span></li>'
-        for p in plan.macro.periods
-    )
+
+    # Cada período es un desplegable (<details>) que contiene SUS semanas dentro.
+    all_micros = [m for meso in plan.macro.mesocycles for m in meso.microcycles]
+    period_blocks = []
+    for p in plan.macro.periods:
+        micros_in = sorted(
+            [m for m in all_micros if p.start_week <= m.week_index <= p.end_week],
+            key=lambda m: m.week_index,
+        )
+        weeks_html = "".join(_week_bar(m) for m in micros_in) or \
+            '<li class="muted">sin semanas</li>'
+        color = pcolor.get(p.kind.value, "#555")
+        period_blocks.append(
+            f'<details style="margin:10px 0;border:1px solid var(--line);border-radius:12px;'
+            f'background:var(--card);padding:6px 14px">'
+            f'<summary style="cursor:pointer;list-style:none;padding:8px 0;font-size:15px">'
+            f'<span class="pill" style="background:{color}">'
+            f'{PERIOD_ES.get(p.kind.value, p.kind.value)}</span> '
+            f'<b>{STAGE_ES.get(p.stage.value, p.stage.value)}</b> '
+            f'<span class="muted">· sem {p.start_week}–{p.end_week} · '
+            f'{len(micros_in)} semana(s)  ▸</span>'
+            f'</summary>'
+            f'<ul class="list" style="margin:6px 0 12px">{weeks_html}</ul>'
+            f'</details>'
+        )
+    periods_html = "".join(period_blocks)
+
     body = f"""
 <div class="card">
   <h2>🏆 {title}</h2>
@@ -270,10 +298,10 @@ def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> st
   <p><a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar macrociclo a Excel</a></p>
 </div>
 <div class="card">
-  <h2>📅 Períodos</h2>
-  <ul class="list">{periods}</ul>
+  <h2>📅 Períodos del macrociclo</h2>
+  <p class="muted">Haz clic en un período para desplegar sus semanas y cargas.</p>
+  {periods_html}
 </div>
-{_render_mesocycles(plan, lang)}
 {_render_plan_sessions(plan, plan_sessions or [])}
 <p><a class="back" href="/">← Inicio</a></p>
 """

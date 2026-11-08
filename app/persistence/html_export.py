@@ -70,6 +70,14 @@ def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
         mats = b.get("materiales") or []
         if mats:
             out.append(f'<div><b>Materiales:</b> {_esc(", ".join(str(m) for m in mats))}</div>')
+        # Diagrama propio del bloque (dibujado desde los datos de la IA).
+        diagrama = b.get("diagrama")
+        try:
+            from app.diagrams import has_drill_data, render_drill
+            if has_drill_data(diagrama):
+                out.append(f'<div class="diagram">{render_drill(diagrama)}</div>')
+        except Exception:
+            pass
         asp = b.get("aspectos") or {}
         if asp:
             out.append('<div class="aspects">')
@@ -110,10 +118,8 @@ def _session_body(session: SessionDoc, lang: str) -> str:
     if session.rich_blocks:
         out.append(f"<h2>{_label('Desarrollo de la sesión','Session plan',lang)}</h2>")
         out.append(_rich_blocks_html(session, lang))
-        if session.svgs:
-            out.append(f"<h2>{_label('Diagramas','Diagrams',lang)}</h2>")
-            for svg in session.svgs:
-                out.append(f'<div class="diagram">{svg}</div>')
+        # Nota: los diagramas van DENTRO de cada bloque (render_drill). Ya no se
+        # muestra el diagrama genérico al final para sesiones ricas.
         if session.individual_goals:
             out.append(f"<h2>{_label('Objetivos individuales','Individual goals',lang)}</h2>")
             out.append("<table><tr>"

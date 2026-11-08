@@ -94,7 +94,17 @@ def build_prompt(request, fmt, micro_ctx: dict, lang: str = "es") -> str:
         '      "variantes": ["string", "string"],\n'
         '      "materiales": ["string"],\n'
         '      "aspectos": {"tecnico": ["string"], "tactico": ["string"], '
-        '"fisico": ["string"], "psicologico": ["string"]}\n'
+        '"fisico": ["string"], "psicologico": ["string"]},\n'
+        '      "diagrama": {\n'
+        '        "ancho_m": number, "alto_m": number,\n'
+        '        "jugadores": [{"x": number, "y": number, "equipo": "a|b", "num": number}],\n'
+        '        "conos": [{"x": number, "y": number}],\n'
+        '        "porterias": [{"x": number, "y": number}],\n'
+        '        "balones": [{"x": number, "y": number}],\n'
+        '        "zonas": [{"x": number, "y": number, "w": number, "h": number, "etiqueta": "string"}],\n'
+        '        "flechas": [{"x1": number, "y1": number, "x2": number, "y2": number, '
+        '"tipo": "carrera|conduccion|pase"}]\n'
+        '      }\n'
         '    }\n'
         '  ],\n'
         '  "carga_total": "string (ej. media-alta)",\n'
@@ -117,7 +127,16 @@ def build_prompt(request, fmt, micro_ctx: dict, lang: str = "es") -> str:
         "- Instrucciones concretas (qué hace el jugador, el guía, el portero), con "
         "dimensiones y nº de participantes por tarea.\n"
         "- Incluye las adaptaciones propias de la modalidad cuando aplique.\n"
-        "- Etiqueta aspectos técnico/táctico/físico/psicológico por bloque.\n\n"
+        "- Etiqueta aspectos técnico/táctico/físico/psicológico por bloque.\n"
+        "- Para CADA bloque incluye un 'diagrama' que represente fielmente el "
+        "ejercicio: coordenadas en METROS con origen en la esquina inferior "
+        "izquierda (x derecha, y arriba), dentro de ancho_m x alto_m (usa las "
+        "dimensiones del bloque). Coloca jugadores (equipo 'a' azul / 'b' rojo, "
+        "numerados), conos que delimiten el área o formen puertas, porterías si "
+        "hay tiro, balones, zonas resaltadas, y flechas tipadas: 'carrera' "
+        "(desplazamiento del jugador), 'conduccion' (lleva el balón), 'pase' "
+        "(envío del balón). El diagrama debe COINCIDIR con la descripción "
+        "(mismo nº de jugadores y espacio).\n\n"
         f"Responde ÚNICAMENTE con un JSON válido con este esquema (sin texto extra):\n{schema}"
     )
 
