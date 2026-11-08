@@ -26,11 +26,21 @@ _CSS = """
   .task { border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin: 10px 0; }
   .task-head { font-weight: bold; font-size: 15px; }
   .task-meta { font-size: 12px; color: #555; margin: 2px 0 6px; }
+  /* Layout de 2 columnas: info a la izquierda, diagrama a la derecha. */
+  .task-cols { display: flex; gap: 18px; align-items: flex-start; }
+  .task-info { flex: 1 1 55%; min-width: 0; }
+  .task-diagram { flex: 0 0 42%; max-width: 440px; }
+  .task-diagram svg { width: 100%; max-width: 440px; height: auto; border: 1px solid #ddd; }
   .diagram svg { max-width: 420px; height: auto; border: 1px solid #ddd; }
-  .aspects { display: flex; gap: 16px; font-size: 12px; flex-wrap: wrap; }
+  .aspects { display: flex; gap: 16px; font-size: 12px; flex-wrap: wrap; margin-top: 8px; }
   .aspects div { flex: 1; min-width: 120px; }
   table { border-collapse: collapse; font-size: 12px; }
   td, th { border: 1px solid #ccc; padding: 3px 6px; }
+  /* En pantallas angostas (móvil) se apila: info arriba, diagrama abajo. */
+  @media (max-width: 640px) {
+    .task-cols { flex-direction: column; }
+    .task-diagram { flex-basis: auto; max-width: 100%; }
+  }
   @media print { body { margin: 0; } .task { page-break-inside: avoid; } }
 </style>
 """
@@ -47,6 +57,13 @@ def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
         "parte_principal": "Parte principal", "juego": "Juego / Partido condicionado",
         "vuelta_calma": "Vuelta a la calma",
     }
+    # Dibujante de diagramas (import una sola vez, reutilizado por bloque).
+    try:
+        from app.diagrams import has_drill_data, render_drill
+    except Exception:  # pragma: no cover - fallback si el módulo no está
+        has_drill_data = None
+        render_drill = None
+
     out = []
     for i, b in enumerate(session.rich_blocks, start=1):
         fase = phase_label.get(str(b.get("fase", "")), str(b.get("fase", "")))
@@ -62,30 +79,42 @@ def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
             meta.append(_esc(str(b.get("dimensiones"))))
         if meta:
             out.append(f'<div class="task-meta">{" · ".join(meta)}</div>')
-        out.append(f'<div>{_esc(str(b.get("descripcion","")))}</div>')
+
+        # ---- Columna izquierda: información del ejercicio ----
+        info = []
+        info.append(f'<div>{_esc(str(b.get("descripcion","")))}</div>')
         variantes = b.get("variantes") or []
         if variantes:
             items = "".join(f"<li>{_esc(str(v))}</li>" for v in variantes)
-            out.append(f'<div><b>Variantes:</b><ul>{items}</ul></div>')
+            info.append(f'<div><b>Variantes:</b><ul>{items}</ul></div>')
         mats = b.get("materiales") or []
         if mats:
-            out.append(f'<div><b>Materiales:</b> {_esc(", ".join(str(m) for m in mats))}</div>')
-        # Diagrama propio del bloque (dibujado desde los datos de la IA).
-        diagrama = b.get("diagrama")
-        try:
-            from app.diagrams import has_drill_data, render_drill
-            if has_drill_data(diagrama):
-                out.append(f'<div class="diagram">{render_drill(diagrama)}</div>')
-        except Exception:
-            pass
+            info.append(f'<div><b>Materiales:</b> {_esc(", ".join(str(m) for m in mats))}</div>')
         asp = b.get("aspectos") or {}
         if asp:
-            out.append('<div class="aspects">')
+            aspects = ['<div class="aspects">']
             for key, titulo in (("tecnico", "Técnico"), ("tactico", "Táctico"),
                                 ("fisico", "Físico"), ("psicologico", "Psicológico")):
                 vals = asp.get(key) or []
-                out.append(f'<div><b>{titulo}</b><br>{_esc(", ".join(str(x) for x in vals) or "-")}</div>')
-            out.append("</div>")
+                aspects.append(
+                    f'<div><b>{titulo}</b><br>{_esc(", ".join(str(x) for x in vals) or "-")}</div>'
+                )
+            aspects.append("</div>")
+            info.append("".join(aspects))
+
+        # ---- Columna derecha: diagrama dibujado desde los datos de la IA ----
+        diagram_html = ""
+        diagrama = b.get("diagrama")
+        if render_drill and has_drill_data and has_drill_data(diagrama):
+            diagram_html = render_drill(diagrama)
+
+        # ---- Armado de las 2 columnas ----
+        out.append('<div class="task-cols">')
+        out.append(f'<div class="task-info">{"".join(info)}</div>')
+        if diagram_html:
+            out.append(f'<div class="task-diagram">{diagram_html}</div>')
+        out.append("</div>")
+
         out.append("</div>")
     if session.adaptation_notes:
         out.append(f'<div class="task"><b>Notas de adaptación:</b> {_esc(session.adaptation_notes)}</div>')
