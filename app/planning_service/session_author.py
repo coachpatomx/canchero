@@ -97,9 +97,9 @@ def build_prompt(request, fmt, micro_ctx: dict, lang: str = "es") -> str:
         '"fisico": ["string"], "psicologico": ["string"]},\n'
         '      "diagrama": {\n'
         '        "ancho_m": number, "alto_m": number,\n'
-        '        "jugadores": [{"x": number, "y": number, "equipo": "a|b", "num": number}],\n'
+        '        "jugadores": [{"x": number, "y": number, "equipo": "a|b|c", "num": number}],\n'
         '        "conos": [{"x": number, "y": number}],\n'
-        '        "porterias": [{"x": number, "y": number}],\n'
+        '        "porterias": [{"x": number, "y": number, "lado": "izq|der|arriba|abajo"}],\n'
         '        "balones": [{"x": number, "y": number}],\n'
         '        "zonas": [{"x": number, "y": number, "w": number, "h": number, "etiqueta": "string"}],\n'
         '        "flechas": [{"x1": number, "y1": number, "x2": number, "y2": number, '
@@ -141,12 +141,18 @@ def build_prompt(request, fmt, micro_ctx: dict, lang: str = "es") -> str:
         "- Para CADA bloque incluye un 'diagrama' que represente fielmente el "
         "ejercicio: coordenadas en METROS con origen en la esquina inferior "
         "izquierda (x derecha, y arriba), dentro de ancho_m x alto_m (usa las "
-        "dimensiones del bloque). Coloca jugadores (equipo 'a' azul / 'b' rojo, "
-        "numerados), conos que delimiten el área o formen puertas, porterías si "
-        "hay tiro, balones, zonas resaltadas, y flechas tipadas: 'carrera' "
-        "(desplazamiento del jugador), 'conduccion' (lleva el balón), 'pase' "
-        "(envío del balón). El diagrama debe COINCIDIR con la descripción "
-        "(mismo nº de jugadores y espacio).\n\n"
+        "dimensiones del bloque). Coloca jugadores (equipo 'a' azul / 'b' "
+        "amarillo / 'c' verde para guías o comodines, numerados), conos que "
+        "delimiten el área o formen puertas, balones, y 'zonas' rectangulares "
+        "para resaltar carriles, cuadrículas o áreas de trabajo (con 'etiqueta').\n"
+        "- PORTERÍAS: puedes poner VARIAS (una lista). Úsalas para mini-porterías, "
+        "porterías a cada lado en un partido, o varias puertas de pase. Indica "
+        "'lado' según en qué borde del espacio está la portería ('izq', 'der', "
+        "'arriba', 'abajo') para que su boca mire hacia dentro del campo.\n"
+        "- Flechas tipadas: 'carrera' (desplazamiento del jugador), 'conduccion' "
+        "(lleva el balón), 'pase' (envío del balón). El diagrama debe COINCIDIR "
+        "con la descripción (mismo nº de jugadores y espacio). El dibujo se "
+        "representa en horizontal: pon el lado más largo del espacio como ancho_m.\n\n"
         f"Responde ÚNICAMENTE con un JSON válido con este esquema (sin texto extra):\n{schema}"
     )
 

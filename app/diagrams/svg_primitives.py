@@ -65,6 +65,37 @@ def cone(cx, cy, size=10, fill="#e67e22"):
     )
 
 
+def goal(cx, cy, orient="left", length=46, depth=14, stroke="#ffffff", stroke_width=4):
+    """Portería estilo pizarra: un pequeño rectángulo abierto (mini-arco).
+
+    `cx, cy` es el centro de la línea de gol. `orient` indica hacia dónde mira la
+    boca de la portería: 'left'/'right' (porterías verticales en bandas izq/der)
+    o 'top'/'bottom' (porterías horizontales arriba/abajo). `length` es el ancho
+    de la boca y `depth` la profundidad hacia dentro del campo.
+    """
+    half = length / 2.0
+    if orient in ("left", "right"):
+        # boca vertical; se dibuja hacia dentro del campo
+        d = depth if orient == "left" else -depth
+        y_top, y_bot = cy - half, cy + half
+        parts = [
+            line(cx, y_top, cx, y_bot, stroke=stroke, stroke_width=stroke_width),
+            line(cx, y_top, cx + d, y_top, stroke=stroke, stroke_width=stroke_width),
+            line(cx, y_bot, cx + d, y_bot, stroke=stroke, stroke_width=stroke_width),
+            line(cx + d, y_top, cx + d, y_bot, stroke=stroke, stroke_width=max(1, stroke_width - 2)),
+        ]
+    else:
+        d = depth if orient == "top" else -depth
+        x_l, x_r = cx - half, cx + half
+        parts = [
+            line(x_l, cy, x_r, cy, stroke=stroke, stroke_width=stroke_width),
+            line(x_l, cy, x_l, cy + d, stroke=stroke, stroke_width=stroke_width),
+            line(x_r, cy, x_r, cy + d, stroke=stroke, stroke_width=stroke_width),
+            line(x_l, cy + d, x_r, cy + d, stroke=stroke, stroke_width=max(1, stroke_width - 2)),
+        ]
+    return "".join(parts)
+
+
 def arrow(x1, y1, x2, y2, stroke="#c0392b", stroke_width=3):
     """Flecha de movimiento: línea con punta (triángulo) en el extremo."""
     import math
