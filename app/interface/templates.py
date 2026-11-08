@@ -113,6 +113,28 @@ def _page(title: str, lang: str, body: str, subtitle: str = "") -> str:
 
 _CATEGORIES = ["", "Sub-13", "Sub-15", "Sub-17", "Sub-19", "Sub-23", "Libre", "Primer equipo"]
 
+# Catálogos de fundamentos para selección múltiple (checkboxes) + texto libre.
+_TECNICOS = ["Conducción", "Pase", "Recepción", "Recepción perfilada", "Control orientado",
+             "Regate", "Tiro a puerta", "Protección del balón", "Cabeceo", "Centro"]
+_TACTICOS = ["Posesión", "Presión", "Transiciones", "Toma de espacios", "Posicionamiento",
+             "Repliegue", "Juego de posición", "Salida de balón", "Vigilancias", "Desmarques"]
+_FISICOS = ["Resistencia", "Velocidad", "Fuerza", "Agilidad", "Potencia", "Flexibilidad",
+            "Coordinación", "Cambio de ritmo", "Arranque", "Resistencia muscular"]
+
+
+def _checkbox_group(name: str, options: list, columns: int = 3) -> str:
+    """Grupo de casillas (selección múltiple) con layout en columnas."""
+    items = "".join(
+        f'<label style="display:inline-flex;align-items:center;gap:6px;'
+        f'font-size:13px;color:var(--ink);margin:0;min-width:33%">'
+        f'<input type="checkbox" name="{name}" value="{o}" '
+        f'style="width:auto;margin:0"> {o}</label>'
+        for o in options
+    )
+    return (f'<div style="display:flex;flex-wrap:wrap;gap:6px 4px;'
+            f'background:#0e1116;border:1px solid var(--line);border-radius:10px;'
+            f'padding:10px">{items}</div>')
+
 
 def render_home(history, models, formats, lang: str = "es", llm_on: bool = False) -> str:
     model_opts = "".join(f'<option value="{m.id}">{m.name.es}</option>' for m in models)
@@ -174,11 +196,18 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
       <div><label>Horario</label><input name="schedule" placeholder="matutino / 10:00"></div>
       <div><label>Semana del plan (opcional)</label><input name="week_index" placeholder="ej. 3"></div>
     </div>
-    <div class="row">
-      <div><label>Fundamento técnico</label><input name="technical_focus" placeholder="conducción, pase..."></div>
-      <div><label>Fundamento táctico</label><input name="tactical_focus" placeholder="presión, posesión..."></div>
-      <div><label>Capacidad física</label><input name="physical_focus" placeholder="resistencia, velocidad..."></div>
-    </div>
+    <label>Fundamentos técnicos (elige los que apliquen)</label>
+    {_checkbox_group("technical_focus", _TECNICOS)}
+    <input name="technical_focus_extra" placeholder="Otros fundamentos técnicos (separa con comas)">
+
+    <label>Fundamentos tácticos</label>
+    {_checkbox_group("tactical_focus", _TACTICOS)}
+    <input name="tactical_focus_extra" placeholder="Otros fundamentos tácticos (separa con comas)">
+
+    <label>Capacidades físicas</label>
+    {_checkbox_group("physical_focus", _FISICOS)}
+    <input name="physical_focus_extra" placeholder="Otras capacidades físicas (separa con comas)">
+
     <label>Material disponible</label>
     <input name="materials" placeholder="balones, conos, vallas, balón sonoro, mini-porterías...">
     <input type="hidden" name="plan_id" value="">

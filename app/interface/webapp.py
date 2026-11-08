@@ -187,6 +187,8 @@ def create_app(service: PlanningService):
         except (TypeError, ValueError):
             return default
 
+    from fastapi import Query
+
     @app.get("/session", response_class=HTMLResponse)
     def create_session_get(
         text: str = "",
@@ -198,19 +200,30 @@ def create_app(service: PlanningService):
         n_players: str = "",
         schedule: str = "",
         phase: str = "",
-        technical_focus: str = "",
-        tactical_focus: str = "",
-        physical_focus: str = "",
+        technical_focus: list[str] = Query(default=[]),
+        technical_focus_extra: str = "",
+        tactical_focus: list[str] = Query(default=[]),
+        tactical_focus_extra: str = "",
+        physical_focus: list[str] = Query(default=[]),
+        physical_focus_extra: str = "",
         materials: str = "",
         week_index: str = "",
     ):
+        def _combine(vals, extra):
+            out = [v.strip() for v in vals if v.strip()]
+            if extra and extra.strip():
+                out += [x.strip() for x in extra.split(",") if x.strip()]
+            return ", ".join(out)
+
         kwargs = dict(
             text=text, format_id=format_id, lang=lang,
             duration_min=_int_or(duration_min, 90),
             category=category, n_players=_int_or(n_players, 0),
             schedule=schedule, phase=phase,
-            technical_focus=technical_focus, tactical_focus=tactical_focus,
-            physical_focus=physical_focus, materials=materials,
+            technical_focus=_combine(technical_focus, technical_focus_extra),
+            tactical_focus=_combine(tactical_focus, tactical_focus_extra),
+            physical_focus=_combine(physical_focus, physical_focus_extra),
+            materials=materials,
             week_index=(_int_or(week_index, 0) or None),
         )
         return _do_create_session(kwargs, plan_id, lang)
