@@ -37,6 +37,15 @@ class SessionDoc:
     adaptation_notes: str = ""
     duration_min: int = 0
     category: str = ""
+    # Estilo de hoja para exportar: "dark" (Canchero) | "inclusivo" (plantilla
+    # tipo Club América Fútbol Inclusivo). Se persiste para /view, /print, /pdf.
+    sheet_style: str = "dark"
+    # Metadatos de encabezado (plantilla inclusiva). Opcionales.
+    team_name: str = ""
+    coach_name: str = ""
+    schedule: str = ""
+    session_number: str = ""
+    format_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -98,6 +107,12 @@ def _session_to_dict(s: SessionDoc) -> dict:
         "adaptation_notes": s.adaptation_notes,
         "duration_min": s.duration_min,
         "category": s.category,
+        "sheet_style": s.sheet_style,
+        "team_name": s.team_name,
+        "coach_name": s.coach_name,
+        "schedule": s.schedule,
+        "session_number": s.session_number,
+        "format_id": s.format_id,
     }
 
 
@@ -118,6 +133,12 @@ def _session_from_dict(d: dict) -> SessionDoc:
         adaptation_notes=d.get("adaptation_notes", ""),
         duration_min=d.get("duration_min", 0),
         category=d.get("category", ""),
+        sheet_style=d.get("sheet_style", "dark"),
+        team_name=d.get("team_name", ""),
+        coach_name=d.get("coach_name", ""),
+        schedule=d.get("schedule", ""),
+        session_number=d.get("session_number", ""),
+        format_id=d.get("format_id", ""),
     )
 
 

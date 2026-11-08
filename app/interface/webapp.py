@@ -147,7 +147,7 @@ def create_app(service: PlanningService):
         _state["active_plan_id"] = plan_id  # abrir un plan lo hace activo
         return HTMLResponse(render_plan(plan, lang, service.repo.list_sessions()))
 
-    def _do_create_session(req_kwargs, plan_id, lang):
+    def _do_create_session(req_kwargs, plan_id, lang, sheet_meta=None):
         effective_plan_id = plan_id or _state.get("active_plan_id", "")
         macro = None
         if effective_plan_id:
@@ -170,6 +170,18 @@ def create_app(service: PlanningService):
             if isinstance(res, Err):
                 return HTMLResponse(f"<p>Error: {res.error.message_es}</p>", status_code=400)
             doc, alignment = res.value
+            # Aplicar estilo de hoja y metadatos de encabezado (plantilla inclusiva).
+            if sheet_meta:
+                from dataclasses import replace as _replace
+                doc = _replace(
+                    doc,
+                    sheet_style=sheet_meta.get("sheet_style", "dark"),
+                    team_name=sheet_meta.get("team_name", ""),
+                    coach_name=sheet_meta.get("coach_name", ""),
+                    schedule=sheet_meta.get("schedule", ""),
+                    session_number=sheet_meta.get("session_number", ""),
+                    format_id=sheet_meta.get("format_id", "") or doc.format_id,
+                )
             # Persistir la sesión en disco (historial de sesiones).
             sid = service.repo.save_session(doc, plan_id=effective_plan_id)
             _sessions[sid] = doc
@@ -216,6 +228,10 @@ def create_app(service: PlanningService):
         physical_focus_extra: str = "",
         materials: str = "",
         week_index: str = "",
+        sheet_style: str = "dark",
+        team_name: str = "",
+        coach_name: str = "",
+        session_number: str = "",
     ):
         def _combine(vals, extra):
             out = [v.strip() for v in vals if v.strip()]
@@ -234,7 +250,13 @@ def create_app(service: PlanningService):
             materials=materials,
             week_index=(_int_or(week_index, 0) or None),
         )
-        return _do_create_session(kwargs, plan_id, lang)
+        sheet_meta = dict(
+            sheet_style=(sheet_style or "dark"),
+            team_name=team_name, coach_name=coach_name,
+            schedule=schedule, session_number=session_number,
+            format_id=format_id,
+        )
+        return _do_create_session(kwargs, plan_id, lang, sheet_meta)
 
     def _get_session(sid):
         doc = _sessions.get(sid)

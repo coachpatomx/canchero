@@ -111,8 +111,47 @@ def _goal_orient(gx_m, largo_m, corto_m, swapped, explicit):
     return "left" if v <= largo_m / 2 else "right"
 
 
-def render_drill(diagram: dict, title: str = "") -> str:
-    """Devuelve un SVG (string) del diagrama del ejercicio (siempre apaisado)."""
+def _draw_blind_pitch(body, sx, sy, iw, ih, line, lw):
+    """Cancha de fútbol 5 para ciegos (IBSA): 40x20 m apaisada, con vallas de
+    rebote en las dos bandas largas, dos áreas de penalti por lado, línea media
+    con círculo central y división en tercios (defensa / medio / ataque)."""
+    x0, y0 = MARGIN, MARGIN
+    x1, y1 = MARGIN + iw, MARGIN + ih
+    cx, cy = x0 + iw / 2, y0 + ih / 2
+    # Vallas de rebote (laterales largos): doble línea más gruesa.
+    body += p.line(x0, y0, x1, y0, stroke=line, stroke_width=lw + 3)
+    body += p.line(x0, y1, x1, y1, stroke=line, stroke_width=lw + 3)
+    # Línea media y círculo central.
+    body += p.line(cx, y0, cx, y1, stroke=line, stroke_width=lw)
+    body += p.circle(cx, cy, ih * 0.16, fill="none", stroke=line, stroke_width=lw)
+    body += p.circle(cx, cy, 3, fill=line, stroke="none")
+    # Tercios (líneas discontinuas que delimitan zona de defensa/medio/ataque).
+    for k in (1, 2):
+        xk = x0 + iw * k / 3
+        body += p.line(xk, y0, xk, y1, stroke=line, stroke_width=1.2, dash="6,8")
+    # Áreas de penalti (una a cada lado), tipo futsal: rectángulo contra la meta.
+    area_w, area_h = iw * 0.11, ih * 0.62
+    ay = y0 + (ih - area_h) / 2
+    body += p.rect(x0, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+    body += p.rect(x1 - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+    # Punto penal a cada lado.
+    body += p.circle(x0 + iw * 0.15, cy, 3, fill=line, stroke="none")
+    body += p.circle(x1 - iw * 0.15, cy, 3, fill=line, stroke="none")
+    # Porterías dibujadas en ambas metas (3 m, centradas).
+    goal_len = ih * 0.30
+    body += p.goal(x0, cy, orient="left", length=goal_len, depth=14, stroke=line)
+    body += p.goal(x1, cy, orient="right", length=goal_len, depth=14, stroke=line)
+    return body
+
+
+def render_drill(diagram: dict, title: str = "", clean: bool = False,
+                 pitch: str = "auto") -> str:
+    """Devuelve un SVG (string) del diagrama del ejercicio (siempre apaisado).
+
+    - clean: oculta flechas, números de jugador, leyenda y etiqueta de medidas
+      (hoja estilo plantilla profesional, se ve más limpio).
+    - pitch: 'auto' (según tamaño) | 'blind' (cancha oficial de fútbol 5 ciegos).
+    """
     ancho = float(diagram.get("ancho_m") or 40)
     alto = float(diagram.get("alto_m") or 30)
     largo_m, corto_m, swapped = _orient_landscape(ancho, alto)
@@ -126,11 +165,13 @@ def render_drill(diagram: dict, title: str = "") -> str:
     line = "#ffffff"
     lw = 2
 
+    if pitch == "blind":
+        body = _draw_blind_pitch(body, sx, sy, iw, ih, line, lw)
     # El tipo de cancha depende del tamaño (lado largo) del espacio:
     # - grande (>= 60 m) -> cancha completa (línea media, círculo, 2 áreas)
     # - mediano (>= 35 m) -> media cancha (un área de finalización)
     # - reducido (< 35 m) -> rejilla sutil de referencia
-    if largo_m >= 60:
+    elif largo_m >= 60:
         body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
         body += p.circle(cx, cy, min(iw, ih) * 0.14, fill="none", stroke=line, stroke_width=lw)
         body += p.circle(cx, cy, 3, fill=line, stroke="none")
@@ -145,20 +186,30 @@ def render_drill(diagram: dict, title: str = "") -> str:
         body += p.rect(MARGIN + iw - small_w, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
         body += p.circle(MARGIN + iw - iw * 0.11, cy, 3, fill=line, stroke="none")
     elif largo_m >= 35:
+        # media cancha: línea media, círculo central y un área de finalización
+        body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, min(iw, ih) * 0.14, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, 3, fill=line, stroke="none")
         area_w, area_h = iw * 0.16, ih * 0.6
         ay = MARGIN + (ih - area_h) / 2
         body += p.rect(MARGIN + iw - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
         body += p.circle(MARGIN + iw - area_w, cy, 3, fill=line, stroke="none")
     else:
+        # espacio reducido: SIEMPRE marcamos la cancha con líneas visibles —
+        # borde, línea media y círculo central — más una rejilla de referencia.
+        body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, min(iw, ih) * 0.16, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, 3, fill=line, stroke="none")
         for k in (1, 2):
             body += p.line(MARGIN + iw * k / 3, MARGIN, MARGIN + iw * k / 3, MARGIN + ih,
-                           stroke=line, stroke_width=1, dash="4,8")
+                           stroke=line, stroke_width=1.5, dash="5,7")
             body += p.line(MARGIN, MARGIN + ih * k / 3, MARGIN + iw, MARGIN + ih * k / 3,
-                           stroke=line, stroke_width=1, dash="4,8")
+                           stroke=line, stroke_width=1.5, dash="5,7")
 
     # etiqueta de dimensiones reales del espacio (ancho x alto originales)
-    body += p.text(MARGIN + 6, MARGIN + ih - 8, f"{int(ancho)}x{int(alto)} m",
-                   size=13, fill="#eafbe9")
+    if not clean:
+        body += p.text(MARGIN + 6, MARGIN + ih - 8, f"{int(ancho)}x{int(alto)} m",
+                       size=13, fill="#eafbe9")
 
     # ---- zonas / figuras (fondo translúcido con etiqueta) ----
     for z in diagram.get("zonas", []) or []:
@@ -182,8 +233,9 @@ def render_drill(diagram: dict, title: str = "") -> str:
             continue
 
     # ---- flechas (sobre el campo, debajo de jugadores) ----
+    # En modo 'clean' (plantilla profesional) NO se dibujan flechas.
     arrow_color = {"carrera": "#ffffff", "conduccion": "#ffd54f", "pase": "#c0392b"}
-    for a in diagram.get("flechas", []) or []:
+    for a in ([] if clean else (diagram.get("flechas", []) or [])):
         try:
             x1, y1 = sx(float(a["x1"]), float(a["y1"])), sy(float(a["x1"]), float(a["y1"]))
             x2, y2 = sx(float(a["x2"]), float(a["y2"])), sy(float(a["x2"]), float(a["y2"]))
@@ -229,7 +281,7 @@ def render_drill(diagram: dict, title: str = "") -> str:
             txt = "#fff" if color != TEAM_B else "#222"  # amarillo lleva texto oscuro
             body += p.circle(px, py, 13, fill=color, stroke="#fff", stroke_width=2)
             num = pl.get("num")
-            if num is not None:
+            if num is not None and not clean:  # 'clean' oculta los números
                 body += p.text(px, py + 4, str(num), size=13, fill=txt, anchor="middle")
         except (KeyError, ValueError, TypeError):
             continue
@@ -243,10 +295,11 @@ def render_drill(diagram: dict, title: str = "") -> str:
         except (KeyError, ValueError, TypeError):
             continue
 
-    # leyenda breve
-    body += p.text(MARGIN, total_h - 10,
-                   "▲ cono   → carrera   ⇢ pase   ∿ conducción   ⊓ portería",
-                   size=13, fill="#eee")
+    # leyenda breve (se omite en modo limpio)
+    if not clean:
+        body += p.text(MARGIN, total_h - 10,
+                       "▲ cono   → carrera   ⇢ pase   ∿ conducción   ⊓ portería",
+                       size=13, fill="#eee")
     if title:
         body = p.text(MARGIN, MARGIN - 12, title, size=18, weight="bold") + body
 

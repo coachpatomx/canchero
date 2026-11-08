@@ -201,8 +201,18 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
       <div><label>Duración (min)</label><input name="duration_min" value="90"></div>
     </div>
     <div class="row">
+      <div><label>Estilo de hoja</label>
+        <select name="sheet_style">
+          <option value="dark">Canchero (oscuro)</option>
+          <option value="inclusivo">Fútbol Inclusivo (plantilla América)</option>
+        </select></div>
       <div><label>Nº de jugadores</label><input name="n_players" placeholder="según formato"></div>
       <div><label>Horario</label><input name="schedule" placeholder="matutino / 10:00"></div>
+    </div>
+    <div class="row">
+      <div><label>Equipo (para la hoja inclusiva)</label><input name="team_name" placeholder="Ej. Ciegos y débiles visuales"></div>
+      <div><label>Entrenador(a)</label><input name="coach_name" placeholder="nombre del entrenador"></div>
+      <div><label>No. de sesión</label><input name="session_number" placeholder="ej. 64"></div>
     </div>
     <label>Fundamentos técnicos (elige los que apliquen)</label>
     {_checkbox_group("technical_focus", _TECNICOS)}
