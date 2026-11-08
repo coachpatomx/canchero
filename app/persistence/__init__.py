@@ -1,0 +1,29 @@
+"""U4 — Persistencia (JSON, D2) y Exportación (HTML base + PDF opcional).
+
+Guarda/reabre planes e historial, biblioteca de ejercicios (RF-9), y exporta a
+documento imprimible (RF-6). Portabilidad por carpeta (RNF-6).
+"""
+from __future__ import annotations
+
+from .html_export import to_html_plan, to_html_session  # noqa: F401
+from .json_repository import JsonFileRepository  # noqa: F401
+from .pdf_export import (  # noqa: F401
+    is_pdf_available,
+    to_pdf_plan,
+    to_pdf_session,
+)
+from .plan import (  # noqa: F401
+    PlanRef,
+    SessionDoc,
+    TrainingPlan,
+    plan_from_dict,
+    plan_to_dict,
+)
+from .repository import PlanRepository  # noqa: F401
+
+__all__ = [
+    "PlanRepository", "JsonFileRepository",
+    "TrainingPlan", "SessionDoc", "PlanRef", "plan_to_dict", "plan_from_dict",
+    "to_html_session", "to_html_plan",
+    "is_pdf_available", "to_pdf_session", "to_pdf_plan",
+]

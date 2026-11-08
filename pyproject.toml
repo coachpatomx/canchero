@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agente-futbol"
+version = "0.1.0"
+description = "Agente de planificación de entrenamientos de fútbol (macro -> meso -> sesión)"
+requires-python = ">=3.11"
+# El núcleo del motor (periodization_engine) usa solo stdlib (RNF-2 offline).
+dependencies = []
+
+[project.optional-dependencies]
+test = ["hypothesis>=6.100", "pytest>=8.0"]
+# PDF nativo opcional (RF-6). Sin esto, el export PDF se hace vía navegador.
+pdf = ["weasyprint>=60"]
+# App web local opcional (RF-2). El orquestador funciona sin esto.
+web = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
+# Conectores LLM de nube opcionales (RF-10). Por defecto NullConnector (offline).
+# Ollama no requiere SDK (usa HTTP/stdlib).
+llm = ["openai>=1.0", "anthropic>=0.40"]
+
+[tool.setuptools]
+packages = [
+    "periodization_engine", "periodization_engine.models",
+    "app", "app.football_domain", "app.football_domain.adapted",
+    "app.diagrams", "app.persistence",
+    "app.planning_service", "app.llm", "app.interface",
+    "app.player_tracking",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,16 @@
+# Secretos — NUNCA subir el .env real (contiene tu clave de API)
+.env
+
+# Entorno virtual
+.venv/
+
+# Datos del usuario (planes, biblioteca) — respaldo manual por carpeta
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/

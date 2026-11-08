@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Canchero — mascota oficial. Logo vectorial escalable (SVG).
+     Paleta: verde #22c55e / naranja #ff7a1a / blanco #f4f4f0 / tinta #1e2430 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 200 270" fill="none">
+  <title>Canchero</title>
+
+  <!-- asa superior -->
+  <path d="M70 58 Q70 14 100 14 Q130 14 130 58" fill="none" stroke="#ff7a1a" stroke-width="12" stroke-linecap="round"/>
+  <rect x="93" y="54" width="14" height="14" fill="#22c55e"/>
+
+  <!-- cuerpo (maniquí de barrera, corto y robusto) -->
+  <path d="M52 76 Q52 66 100 66 Q148 66 148 76 L139 190 Q138 204 124 204 L76 204 Q62 204 61 190 Z" fill="#22c55e"/>
+
+  <!-- textura de puntos (perforado del maniquí) -->
+  <g fill="#0e1116" opacity="0.16">
+    <circle cx="90" cy="168" r="2.7"/><circle cx="100" cy="168" r="2.7"/><circle cx="110" cy="168" r="2.7"/>
+    <circle cx="95" cy="184" r="2.7"/><circle cx="105" cy="184" r="2.7"/>
+  </g>
+
+  <!-- ojos grandes, bizquitos (pupilas hacia el centro) -->
+  <ellipse cx="82" cy="112" rx="18" ry="24" fill="#f4f4f0" stroke="#0e1116" stroke-width="3"/>
+  <ellipse cx="118" cy="112" rx="18" ry="24" fill="#f4f4f0" stroke="#0e1116" stroke-width="3"/>
+  <ellipse cx="90" cy="114" rx="10" ry="13" fill="#1e2430"/>
+  <ellipse cx="110" cy="114" rx="10" ry="13" fill="#1e2430"/>
+  <circle cx="87" cy="108" r="3.4" fill="#ffffff"/>
+  <circle cx="107" cy="108" r="3.4" fill="#ffffff"/>
+
+  <!-- sonrisa -->
+  <path d="M88 150 q12 9 24 0" stroke="#f4f4f0" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <!-- 4 patas delgadas -->
+  <path d="M78 204 L75 242" stroke="#22c55e" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M92 204 L90 243" stroke="#22c55e" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M108 204 L110 243" stroke="#22c55e" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M122 204 L125 242" stroke="#22c55e" stroke-width="7.5" stroke-linecap="round"/>
+
+  <!-- base / peana -->
+  <rect x="62" y="243" width="76" height="13" rx="5" fill="#ff7a1a"/>
+</svg>
