@@ -150,8 +150,16 @@ def create_app(service: PlanningService):
     def _do_create_session(req_kwargs, plan_id, lang):
         effective_plan_id = plan_id or _state.get("active_plan_id", "")
         macro = None
-        if effective_plan_id and effective_plan_id in _plans:
-            macro = _plans[effective_plan_id].macro
+        if effective_plan_id:
+            # Cargar el plan elegido (de cache o disco) para alinear la sesión.
+            plan_obj = _plans.get(effective_plan_id)
+            if plan_obj is None:
+                loaded = service.repo.load(effective_plan_id)
+                if not isinstance(loaded, Err):
+                    plan_obj = loaded.value
+                    _plans[effective_plan_id] = plan_obj
+            if plan_obj is not None:
+                macro = plan_obj.macro
         # Hereda categoría del plan activo si no se especificó en la sesión.
         if not req_kwargs.get("category"):
             req_kwargs["category"] = _state.get("active_category", "")

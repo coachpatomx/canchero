@@ -140,6 +140,10 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     model_opts = "".join(f'<option value="{m.id}">{m.name.es}</option>' for m in models)
     fmt_opts = "".join(f'<option value="{f.id}">{f.name.es}</option>' for f in formats)
     cat_opts = "".join(f'<option value="{c}">{c or "— sin especificar —"}</option>' for c in _CATEGORIES)
+    # Selector de plan para la sesión (vincular a un plan existente).
+    plan_opts = '<option value="">— sin plan (sesión suelta) —</option>' + "".join(
+        f'<option value="{h.id}">{h.title_es}</option>' for h in history
+    )
     rows = "".join(
         f'<li><a class="back" href="/plan/{h.id}"><b>{h.title_es}</b></a> '
         f"<span class='muted'>· {h.model_id} / {h.format_id} · {h.created_at[:10]}</span></li>"
@@ -187,6 +191,11 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     <label>¿Qué quieres entrenar?</label>
     <input name="text" placeholder="Ej. sesión de conducción y recepción perfilada en espacio reducido con tiro a puerta" required>
     <div class="row">
+      <div><label>Vincular a un plan (para alinear cargas)</label>
+        <select name="plan_id">{plan_opts}</select></div>
+      <div><label>Semana del plan</label><input name="week_index" placeholder="ej. 3"></div>
+    </div>
+    <div class="row">
       <div><label>Formato</label><select name="format_id">{fmt_opts}</select></div>
       <div><label>Categoría</label><select name="category">{cat_opts}</select></div>
       <div><label>Duración (min)</label><input name="duration_min" value="90"></div>
@@ -194,7 +203,6 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     <div class="row">
       <div><label>Nº de jugadores</label><input name="n_players" placeholder="según formato"></div>
       <div><label>Horario</label><input name="schedule" placeholder="matutino / 10:00"></div>
-      <div><label>Semana del plan (opcional)</label><input name="week_index" placeholder="ej. 3"></div>
     </div>
     <label>Fundamentos técnicos (elige los que apliquen)</label>
     {_checkbox_group("technical_focus", _TECNICOS)}
@@ -210,7 +218,6 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
 
     <label>Material disponible</label>
     <input name="materials" placeholder="balones, conos, vallas, balón sonoro, mini-porterías...">
-    <input type="hidden" name="plan_id" value="">
     <button type="submit">✨ Generar sesión</button>
   </form>
 </div>

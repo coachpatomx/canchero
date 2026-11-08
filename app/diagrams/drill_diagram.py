@@ -68,30 +68,47 @@ def render_drill(diagram: dict, title: str = "") -> str:
     body = p.rect(0, 0, CANVAS_W, total_h, fill=GRASS, stroke="none")
     body += p.rect(MARGIN, MARGIN, iw, ih, fill=GREEN, stroke="#ffffff", stroke_width=3)
 
-    # ---- Marcas de cancha de fútbol ----
     cx = MARGIN + iw / 2
     cy = MARGIN + ih / 2
     line = "#ffffff"
     lw = 2
-    # línea media (vertical) + círculo central + punto central
-    body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
-    body += p.circle(cx, cy, min(iw, ih) * 0.14, fill="none", stroke=line, stroke_width=lw)
-    body += p.circle(cx, cy, 3, fill=line, stroke="none")
-    # áreas grande y pequeña + punto de penal, en ambos extremos
-    area_w = iw * 0.09
-    area_h = ih * 0.55
-    ay = MARGIN + (ih - area_h) / 2
-    small_w = iw * 0.035
-    small_h = ih * 0.28
-    sy_ = MARGIN + (ih - small_h) / 2
-    # izquierda
-    body += p.rect(MARGIN, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
-    body += p.rect(MARGIN, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
-    body += p.circle(MARGIN + iw * 0.11, cy, 3, fill=line, stroke="none")
-    # derecha
-    body += p.rect(MARGIN + iw - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
-    body += p.rect(MARGIN + iw - small_w, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
-    body += p.circle(MARGIN + iw - iw * 0.11, cy, 3, fill=line, stroke="none")
+
+    # El tipo de cancha depende del tamaño del espacio del ejercicio:
+    # - grande (campo completo, ~>= 60 m de largo o fase de juego) -> cancha completa
+    # - mediano -> media cancha (área + círculo parcial)
+    # - reducido/pequeño -> solo el rectángulo de trabajo con una rejilla sutil
+    if ancho >= 60:
+        # cancha completa
+        body += p.line(cx, MARGIN, cx, MARGIN + ih, stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, min(iw, ih) * 0.14, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(cx, cy, 3, fill=line, stroke="none")
+        area_w, area_h = iw * 0.09, ih * 0.55
+        ay = MARGIN + (ih - area_h) / 2
+        small_w, small_h = iw * 0.035, ih * 0.28
+        sy_ = MARGIN + (ih - small_h) / 2
+        body += p.rect(MARGIN, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+        body += p.rect(MARGIN, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(MARGIN + iw * 0.11, cy, 3, fill=line, stroke="none")
+        body += p.rect(MARGIN + iw - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+        body += p.rect(MARGIN + iw - small_w, sy_, small_w, small_h, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(MARGIN + iw - iw * 0.11, cy, 3, fill=line, stroke="none")
+    elif ancho >= 35:
+        # media cancha: un área a la derecha (zona de finalización) + semicírculo
+        area_w, area_h = iw * 0.16, ih * 0.6
+        ay = MARGIN + (ih - area_h) / 2
+        body += p.rect(MARGIN + iw - area_w, ay, area_w, area_h, fill="none", stroke=line, stroke_width=lw)
+        body += p.circle(MARGIN + iw - area_w, cy, 3, fill=line, stroke="none")
+    else:
+        # espacio reducido: rejilla sutil para dar referencia de dimensiones
+        for k in (1, 2):
+            body += p.line(MARGIN + iw * k / 3, MARGIN, MARGIN + iw * k / 3, MARGIN + ih,
+                           stroke=line, stroke_width=1, dash="4,8")
+            body += p.line(MARGIN, MARGIN + ih * k / 3, MARGIN + iw, MARGIN + ih * k / 3,
+                           stroke=line, stroke_width=1, dash="4,8")
+
+    # etiqueta de dimensiones reales del espacio
+    body += p.text(MARGIN + 6, MARGIN + ih - 8, f"{int(ancho)}x{int(alto)} m",
+                   size=13, fill="#eafbe9")
 
     # zonas (fondo)
     for z in diagram.get("zonas", []) or []:
