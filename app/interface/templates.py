@@ -178,9 +178,64 @@ def render_plan(plan, lang: str = "es") -> str:
   <h2>📅 {_t('Períodos','Periods',lang)}</h2>
   <ul class="list">{periods}</ul>
 </div>
+{_render_mesocycles(plan, lang)}
 <p><a class="back" href="/">← {_t('Inicio','Home',lang)}</a></p>
 """
     return _page(title, lang, body)
+
+
+# Color de barra según intensidad (verde bajo -> naranja medio -> rojo alto).
+def _load_color(intensity: int) -> str:
+    if intensity >= 85:
+        return "#ef4444"      # alta
+    if intensity >= 60:
+        return "#ff7a1a"      # media
+    return "#22c55e"          # baja
+
+
+def _render_mesocycles(plan, lang: str = "es") -> str:
+    """Detalle del macro: cada mesociclo con sus microciclos (semana, tipo, cargas)."""
+    mesotype = {
+        "base": ("Base", "Base"), "development": ("Desarrollo", "Development"),
+        "stabilization": ("Estabilización", "Stabilization"),
+        "competitive": ("Competitivo", "Competitive"), "recovery": ("Recuperación", "Recovery"),
+    }
+    microtype = {
+        "introductory": ("Introductorio", "Introductory"),
+        "developmental": ("Desarrollador", "Developmental"),
+        "shock": ("Choque", "Shock"), "recovery": ("Recuperación", "Recovery"),
+        "precompetitive": ("Precompetitivo", "Precompetitive"),
+        "competition": ("Competencia", "Competition"),
+    }
+    blocks = []
+    for i, meso in enumerate(plan.macro.mesocycles, start=1):
+        mt = mesotype.get(meso.type.value, (meso.type.value, meso.type.value))
+        micro_rows = []
+        for m in meso.microcycles:
+            mct = microtype.get(m.type.value, (m.type.value, m.type.value))
+            vol, inten = m.target_volume_pct, m.target_intensity_pct
+            # mini-barras de carga
+            bar = (
+                f'<span style="display:inline-block;height:8px;width:{vol}px;max-width:100px;'
+                f'background:#3b82f6;border-radius:4px;vertical-align:middle"></span>'
+                f'<span class="muted" style="margin:0 10px 0 6px">vol {vol}%</span>'
+                f'<span style="display:inline-block;height:8px;width:{inten}px;max-width:100px;'
+                f'background:{_load_color(inten)};border-radius:4px;vertical-align:middle"></span>'
+                f'<span class="muted" style="margin-left:6px">int {inten}%</span>'
+            )
+            label = mct[0] if lang == "es" else mct[1]
+            micro_rows.append(
+                f'<li><b>{_t("Sem","Wk",lang)} {m.week_index}</b> '
+                f'<span class="muted">· {label} · {_t("sesiones","sessions",lang)}: {len(m.session_slots)}</span>'
+                f'<div style="margin-top:6px">{bar}</div></li>'
+            )
+        name = mt[0] if lang == "es" else mt[1]
+        blocks.append(
+            f'<div class="card"><h2>🔁 {_t("Mesociclo","Mesocycle",lang)} {i} · {name} '
+            f'<span class="muted" style="font-weight:400">({_t("sem","wk",lang)} {meso.start_week}–{meso.end_week})</span></h2>'
+            f'<ul class="list">{"".join(micro_rows)}</ul></div>'
+        )
+    return "".join(blocks)
 
 
 def render_roster(roster, lang: str = "es") -> str:
