@@ -74,7 +74,7 @@ def is_complete(answers: dict, plans: list | None = None) -> bool:
 
 def summary(answers: dict) -> str:
     a = answers
-    plan = "sin plan" if a.get("plan") in ("__none__", "", None) else f"plan {a.get('plan')}"
+    plan = "sin plan" if a.get("plan") in ("__none__", "", None) else "vinculada a un plan"
     foco = ", ".join(x for x in (a.get("technical"), a.get("tactical"), a.get("physical"))
                      if x and x != "__skip__")
     partes = [a.get("text", ""), plan]

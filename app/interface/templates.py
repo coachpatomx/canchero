@@ -975,11 +975,16 @@ def render_session_interview(answers: dict, question: dict | None,
     labels = {"plan": "Plan", "week": "Semana", "text": "Tema",
               "technical": "Técnico", "tactical": "Táctico", "physical": "Físico",
               "duration": "Duración", "sheet_style": "Hoja"}
+    # Mapa id->título de plan para mostrar el nombre, no el id interno.
+    plan_names = {p["id"]: p["title"] for p in (plans or [])}
     for k in si.STEPS:
         if k in answers and str(answers[k]) not in ("", "__skip__", "__none__"):
+            val = answers[k]
+            if k == "plan":
+                val = plan_names.get(val, "Sesión suelta" if val in ("__none__", "") else val)
             bubbles.append(
                 f'<div class="ib-me">{_esc_studio(labels.get(k,k))}: '
-                f'{_esc_studio(str(answers[k]))}</div>')
+                f'{_esc_studio(str(val))}</div>')
 
     if question is None:
         panel = (
