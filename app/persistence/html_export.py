@@ -249,6 +249,31 @@ _PHASE_INCL = {
 }
 
 
+def _stretch_graphic() -> str:
+    """Imagen genérica (SVG) para el bloque de estiramiento / vuelta a la calma."""
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" '
+        'viewBox="0 0 1000 420" style="width:100%;max-width:430px;height:auto">'
+        '<rect width="1000" height="420" fill="#2e7d32"/>'
+        '<rect x="40" y="40" width="920" height="340" fill="#43a047" stroke="#fff" stroke-width="3"/>'
+        # cuatro figuras simples de personas estirando
+        + "".join(
+            f'<g transform="translate({x},210)">'
+            '<circle cx="0" cy="-70" r="26" fill="#f4c20d" stroke="#1a2a52" stroke-width="4"/>'
+            '<line x1="0" y1="-44" x2="0" y2="30" stroke="#1a2a52" stroke-width="10"/>'
+            '<line x1="0" y1="-20" x2="-38" y2="-50" stroke="#1a2a52" stroke-width="9"/>'
+            '<line x1="0" y1="-20" x2="38" y2="10" stroke="#1a2a52" stroke-width="9"/>'
+            '<line x1="0" y1="30" x2="-30" y2="90" stroke="#1a2a52" stroke-width="9"/>'
+            '<line x1="0" y1="30" x2="34" y2="88" stroke="#1a2a52" stroke-width="9"/>'
+            '</g>'
+            for x in (230, 420, 610, 800)
+        )
+        + '<text x="500" y="400" font-size="15" fill="#eafbe9" text-anchor="middle" '
+        'font-family="sans-serif">Estiramiento / vuelta a la calma</text>'
+        '</svg>'
+    )
+
+
 def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
     """Hoja de sesión con la plantilla 'Fútbol Inclusivo' (estilo América)."""
     try:
@@ -258,9 +283,11 @@ def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
 
     obj = session.objective.es if lang == "es" else session.objective.en
     load = session.load_label.es if lang == "es" else session.load_label.en
-    # ¿La modalidad es fútbol para ciegos? -> cancha oficial de ciegos.
-    is_blind = (getattr(session, "format_id", "") == "blind_5")
-    pitch_mode = "blind" if is_blind else "auto"
+    # Plantilla inclusiva: cancha base de FÚTBOL PARA CIEGOS (líneas oficiales:
+    # vallas, dos áreas, dos porterías, tercios). Si el espacio del ejercicio es
+    # reducido, el dibujante ya ajusta; si no, usa la cancha de ciegos de base.
+    fmt = getattr(session, "format_id", "")
+    pitch_mode = "blind" if fmt in ("", "blind_5") else "auto"
 
     team = _esc(session.team_name or "")
     coach = _esc(session.coach_name or "")
@@ -335,13 +362,19 @@ def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
             items = "".join(f"<li>{_esc(str(v))}</li>" for v in variantes)
             left.append(f'<div style="margin-top:6px"><b>Variantes:</b><ul>{items}</ul></div>')
 
-        # Diagrama limpio (sin flechas ni números) a la derecha.
-        diag_html = ""
+        # Diagrama a la derecha: cancha base + flechas tipadas (pase punteada,
+        # conducción ondulada, carrera sólida) y jugadores numerados. Equilibrado.
+        fase_key = str(b.get("fase", ""))
         diagrama = b.get("diagrama")
         if render_drill and has_drill_data and has_drill_data(diagrama):
-            diag_html = render_drill(diagrama, clean=True, pitch=pitch_mode)
+            diag_html = render_drill(diagrama, clean=False, pitch=pitch_mode)
+        elif fase_key == "vuelta_calma":
+            # Estiramientos: imagen genérica (no necesita cancha).
+            diag_html = _stretch_graphic()
         else:
-            diag_html = '<span style="color:#cfe8cf">Gráfica</span>'
+            # Bloque sin diagrama: cancha base vacía para que se pueda dibujar a mano.
+            diag_html = render_drill({"ancho_m": 40, "alto_m": 20}, clean=False,
+                                     pitch=pitch_mode) if render_drill else "—"
 
         out.append(
             '<table class="incl-block">'
