@@ -313,6 +313,7 @@ def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> st
   <h2>🏆 {title}</h2>
   <p class="muted">Modelo: <b>{MODEL_ES.get(plan.macro.model_id, plan.macro.model_id)}</b> · Semanas: <b>{plan.macro.total_weeks}</b> · Sesiones: <b>{weeks}</b></p>
   <p>
+    <a class="btn" href="/plan/{plan.id}/chat">💬 Editar con el agente</a>
     <a class="btn" href="/plan/{plan.id}/matrix" target="_blank">📊 Ver matriz (plantilla)</a>
     <a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar a Excel</a>
   </p>
@@ -518,3 +519,107 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
     banner = f'<div class="banner" style="background:{color}">{align_msg}{src_badge}</div>'
     body = f'{banner}{inner}<p>{pdf_btn} &nbsp; <a class="back" href="/">← {_t("Inicio","Home",lang)}</a></p>'
     return _page(_t("Sesión", "Session", lang), lang, body)
+
+
+# --------------------------------------------------------------------------- #
+# Pantalla "estudio": chat iterativo (izquierda) + vista previa matriz (derecha).
+# El entrenador escribe un ajuste en lenguaje natural y ve el cambio al instante.
+# --------------------------------------------------------------------------- #
+def render_plan_studio(plan, lang: str = "es", chat_history=None,
+                       meta: dict | None = None) -> str:
+    meta = meta or {}
+    title = plan.title.es if lang == "es" else plan.title.en
+    pid = plan.id
+    history = chat_history or []
+
+    # Burbujas del chat.
+    bubbles = []
+    for msg in history:
+        who = msg.get("role", "user")
+        text = _esc_studio(msg.get("text", ""))
+        if who == "user":
+            bubbles.append(
+                f'<div style="align-self:flex-end;background:#22c55e;color:#06220f;'
+                f'padding:9px 13px;border-radius:14px 14px 2px 14px;max-width:85%;'
+                f'margin:4px 0;font-size:14px">{text}</div>'
+            )
+        else:
+            bubbles.append(
+                f'<div style="align-self:flex-start;background:#1b2330;color:#e7edf3;'
+                f'padding:9px 13px;border-radius:14px 14px 14px 2px;max-width:85%;'
+                f'margin:4px 0;font-size:14px">{text}</div>'
+            )
+    if not bubbles:
+        bubbles.append(
+            '<div style="align-self:flex-start;background:#1b2330;color:#9fb0c0;'
+            'padding:9px 13px;border-radius:14px;max-width:90%;margin:4px 0;font-size:14px">'
+            '¡Hola! Soy tu asistente. Dime cómo ajustar el macrociclo, por ejemplo:<br>'
+            '• «sube el volumen de la semana 5»<br>'
+            '• «pon la intensidad del mesociclo 2 en 80»<br>'
+            '• «marca la semana 8 como descarga»<br>'
+            '• «cambia el objetivo del mesociclo 3 a presión alta»</div>'
+        )
+
+    # Query string para conservar los metadatos del encabezado al re-render.
+    import urllib.parse
+    qs = urllib.parse.urlencode({k: v for k, v in meta.items() if v})
+    sep = "&" if qs else ""
+    preview_url = f"/plan/{pid}/matrix" + (f"?{qs}" if qs else "")
+
+    chips = (
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">'
+        + "".join(
+            f'<a href="/plan/{pid}/chat/apply?{qs}{sep}instruction={urllib.parse.quote(c)}" '
+            f'style="background:#1b2330;color:#9fb0c0;border:1px solid #2a3647;'
+            f'border-radius:999px;padding:5px 11px;font-size:12px;text-decoration:none">{c}</a>'
+            for c in ("sube el volumen de la semana 3",
+                      "baja la intensidad del mesociclo 2",
+                      "marca la semana 8 como descarga")
+        )
+        + "</div>"
+    )
+
+    body = f"""
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="display:flex;min-height:72vh;flex-wrap:wrap">
+    <!-- Columna chat -->
+    <div style="flex:1 1 360px;min-width:320px;display:flex;flex-direction:column;
+                border-right:1px solid var(--line);background:#0e1116">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--line)">
+        <b>💬 Ajusta el macrociclo hablando</b>
+        <div class="muted" style="font-size:12px">{_esc_studio(title)}</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column">
+        {"".join(bubbles)}
+      </div>
+      <div style="padding:12px 14px;border-top:1px solid var(--line)">
+        {chips}
+        <form method="get" action="/plan/{pid}/chat/apply" style="display:flex;gap:8px;margin:0">
+          {"".join(f'<input type="hidden" name="{k}" value="{_esc_studio(str(v))}">' for k,v in meta.items() if v)}
+          <input name="instruction" placeholder="Escribe tu ajuste…" autofocus
+                 style="flex:1;margin:0" required>
+          <button type="submit" style="margin:0">➤</button>
+        </form>
+      </div>
+    </div>
+    <!-- Columna vista previa -->
+    <div style="flex:2 1 520px;min-width:360px;background:#fff">
+      <div style="padding:8px 12px;background:#161b22;color:#9fb0c0;font-size:12px;
+                  display:flex;justify-content:space-between;align-items:center">
+        <span>Vista previa (se actualiza con cada cambio)</span>
+        <a class="btn" href="{preview_url}" target="_blank"
+           style="margin:0;padding:6px 12px;font-size:12px">🖨️ Abrir / Imprimir</a>
+      </div>
+      <iframe src="{preview_url}" style="width:100%;height:68vh;border:0;background:#fff"></iframe>
+    </div>
+  </div>
+</div>
+<p><a class="back" href="/plan/{pid}">← Volver al plan</a> &nbsp;
+   <a class="back" href="/">Inicio</a></p>
+"""
+    return _page(f"Estudio · {title}", lang, body, "Edita conversando con el agente")
+
+
+def _esc_studio(s: str) -> str:
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;"))

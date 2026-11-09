@@ -24,6 +24,7 @@ def _esc_html(s: str) -> str:
 from .templates import (
     render_home,
     render_plan,
+    render_plan_studio,
     render_roster,
     render_session,
     render_sessions_history,
@@ -40,6 +41,7 @@ def create_app(service: PlanningService):
     _sessions: dict[str, object] = {}
     _session_order: list[str] = []       # historial de sesiones (orden)
     _state: dict[str, str] = {"active_plan_id": "", "active_category": ""}
+    _chat: dict[str, list] = {}          # historial de chat del estudio, por plan_id
 
     # Sirve los archivos estáticos (logo Canchero, favicon) desde app/interface/static
     import os
@@ -149,16 +151,57 @@ def create_app(service: PlanningService):
                                    coach=coach, period_label=period_label)
         return HTMLResponse(html)
 
-    @app.get("/plan/{plan_id}", response_class=HTMLResponse)
-    def view_plan(plan_id: str, lang: str = "es"):
-        # Consulta un plan del historial: cache en memoria o disco.
+    def _load_plan(plan_id):
         plan = _plans.get(plan_id)
         if plan is None:
             res = service.repo.load(plan_id)
             if isinstance(res, Err):
-                return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
+                return None
             plan = res.value
             _plans[plan_id] = plan
+        return plan
+
+    @app.get("/plan/{plan_id}/chat", response_class=HTMLResponse)
+    def plan_studio(plan_id: str, lang: str = "es", team: str = "",
+                    coordinator: str = "", coach: str = "", period_label: str = ""):
+        plan = _load_plan(plan_id)
+        if plan is None:
+            return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
+        meta = {"team": team, "coordinator": coordinator, "coach": coach,
+                "period_label": period_label}
+        return HTMLResponse(render_plan_studio(plan, lang, _chat.get(plan_id, []), meta))
+
+    @app.get("/plan/{plan_id}/chat/apply", response_class=HTMLResponse)
+    def plan_studio_apply(plan_id: str, instruction: str = "", lang: str = "es",
+                          team: str = "", coordinator: str = "", coach: str = "",
+                          period_label: str = ""):
+        plan = _load_plan(plan_id)
+        if plan is None:
+            return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
+        meta = {"team": team, "coordinator": coordinator, "coach": coach,
+                "period_label": period_label}
+        hist = _chat.setdefault(plan_id, [])
+        instruction = (instruction or "").strip()
+        if instruction:
+            from dataclasses import replace as _replace
+            from app.planning_service.plan_editor import edit_macro_from_text
+            hist.append({"role": "user", "text": instruction})
+            new_macro, message = edit_macro_from_text(service.llm, plan.macro, instruction)
+            # Reconstruir el plan con el macro mutado y persistir.
+            plan = _replace(plan, macro=new_macro)
+            _plans[plan_id] = plan
+            try:
+                service.repo.save(plan)
+            except Exception:
+                pass  # si falla el guardado, al menos la cache queda actualizada
+            hist.append({"role": "assistant", "text": message})
+        return HTMLResponse(render_plan_studio(plan, lang, hist, meta))
+
+    @app.get("/plan/{plan_id}", response_class=HTMLResponse)
+    def view_plan(plan_id: str, lang: str = "es"):
+        plan = _load_plan(plan_id)
+        if plan is None:
+            return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
         _state["active_plan_id"] = plan_id  # abrir un plan lo hace activo
         return HTMLResponse(render_plan(plan, lang, service.repo.list_sessions()))
 
