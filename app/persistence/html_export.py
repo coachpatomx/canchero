@@ -50,6 +50,30 @@ def _label(es: str, en: str, lang: str) -> str:
     return es if lang == "es" else en
 
 
+def _session_pitch(session) -> tuple[str, int, int]:
+    """Cancha base ESTÁNDAR y CONSISTENTE para TODA la sesión (todos los bloques
+    comparten la misma, solo cambian los elementos encima).
+
+    Devuelve (modo_pitch, ancho_m, alto_m)."""
+    fmt = getattr(session, "format_id", "")
+    if fmt in ("", "blind_5"):
+        return "blind", 40, 20          # fútbol ciegos: cancha oficial 40x20
+    if fmt in ("futsal", "cp_7"):
+        return "blind", 40, 20          # media/sala -> misma base apaisada
+    if fmt in ("football_7", "down", "amputee"):
+        return "auto", 60, 40
+    return "auto", 70, 45               # fútbol 11 u otros
+
+
+def _fix_diagram(diagrama, ancho_m: int, alto_m: int) -> dict:
+    """Fija las dimensiones del diagrama a la cancha estándar de la sesión, sin
+    perder los elementos (jugadores/conos/flechas/porterías) que puso la IA."""
+    d = dict(diagrama or {})
+    d["ancho_m"] = ancho_m
+    d["alto_m"] = alto_m
+    return d
+
+
 def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
     """Render de una sesión rica generada por LLM (bloques profesionales)."""
     phase_label = {
@@ -63,6 +87,9 @@ def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
     except Exception:  # pragma: no cover - fallback si el módulo no está
         has_drill_data = None
         render_drill = None
+
+    # Cancha base ESTÁNDAR para toda la sesión (consistencia en todos los bloques).
+    pitch_mode, pw, ph = _session_pitch(session)
 
     out = []
     for i, b in enumerate(session.rich_blocks, start=1):
@@ -102,11 +129,14 @@ def _rich_blocks_html(session: SessionDoc, lang: str) -> str:
             aspects.append("</div>")
             info.append("".join(aspects))
 
-        # ---- Columna derecha: diagrama dibujado desde los datos de la IA ----
+        # ---- Columna derecha: diagrama sobre la cancha ESTÁNDAR de la sesión ----
         diagram_html = ""
         diagrama = b.get("diagrama")
+        fase_key = str(b.get("fase", ""))
         if render_drill and has_drill_data and has_drill_data(diagrama):
-            diagram_html = render_drill(diagrama)
+            diagram_html = render_drill(_fix_diagram(diagrama, pw, ph), pitch=pitch_mode)
+        elif render_drill and fase_key == "vuelta_calma":
+            diagram_html = _stretch_graphic()
 
         # ---- Armado de las 2 columnas ----
         out.append('<div class="task-cols">')
@@ -285,11 +315,8 @@ def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
 
     obj = session.objective.es if lang == "es" else session.objective.en
     load = session.load_label.es if lang == "es" else session.load_label.en
-    # Plantilla inclusiva: cancha base de FÚTBOL PARA CIEGOS (líneas oficiales:
-    # vallas, dos áreas, dos porterías, tercios). Si el espacio del ejercicio es
-    # reducido, el dibujante ya ajusta; si no, usa la cancha de ciegos de base.
-    fmt = getattr(session, "format_id", "")
-    pitch_mode = "blind" if fmt in ("", "blind_5") else "auto"
+    # Cancha base ESTÁNDAR y consistente para toda la sesión (misma en cada bloque).
+    pitch_mode, pw, ph = _session_pitch(session)
 
     team = _esc(session.team_name or "")
     coach = _esc(session.coach_name or "")
@@ -369,20 +396,14 @@ def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
         fase_key = str(b.get("fase", ""))
         diagrama = b.get("diagrama")
         if render_drill and has_drill_data and has_drill_data(diagrama):
-            # Cancha CONSISTENTE: en la plantilla inclusiva todos los bloques usan
-            # la misma cancha base (ciegos 40x20). Normalizamos las dimensiones del
-            # diagrama para que la base se vea igual en toda la sesión.
-            if pitch_mode == "blind":
-                diagrama = dict(diagrama)
-                diagrama["ancho_m"] = 40
-                diagrama["alto_m"] = 20
-            diag_html = render_drill(diagrama, clean=False, pitch=pitch_mode)
+            # Cancha CONSISTENTE: misma base estándar en todos los bloques.
+            diag_html = render_drill(_fix_diagram(diagrama, pw, ph),
+                                     clean=False, pitch=pitch_mode)
         elif fase_key == "vuelta_calma":
-            # Estiramientos: imagen genérica (no necesita cancha).
-            diag_html = _stretch_graphic()
+            diag_html = _stretch_graphic()      # estiramiento: imagen genérica
         else:
-            # Bloque sin diagrama: cancha base vacía para que se pueda dibujar a mano.
-            diag_html = render_drill({"ancho_m": 40, "alto_m": 20}, clean=False,
+            # Bloque sin diagrama: cancha base vacía (misma estándar) para dibujar.
+            diag_html = render_drill(_fix_diagram({}, pw, ph), clean=False,
                                      pitch=pitch_mode) if render_drill else "—"
 
         out.append(
