@@ -1,15 +1,20 @@
-# Agente de Fútbol
+# Canchero — Agente de Fútbol
 
-Planificador de entrenamientos de fútbol que **encadena macrociclo → mesociclo → sesión** de forma coherente, con diagramas de cancha de lo que se va a practicar. Local primero, agnóstico al tipo de fútbol (11, 7, sala y modalidades adaptadas), construido con metodología determinista + LLM opcional.
+**Canchero** es un agente planificador de fútbol que encadena **macrociclo → mesociclo → microciclo → sesión** de forma coherente, con diagramas de cancha, y donde **conversas con el agente** para crear y ajustar todo. Local primero, agnóstico al tipo de fútbol (11, 7, sala y modalidades adaptadas), con motor determinista + LLM opcional (OpenAI / Claude / Ollama).
 
-/ Football training planner that chains macrocycle → mesocycle → session coherently, with pitch diagrams. Local-first, format-agnostic, deterministic engine + optional LLM.
+Tagline: *Sí la mueve planificando.*
 
-## Qué hace
+## Qué hace (v1)
 
-- Genera un **plan de temporada** a partir de parámetros (duración, días/semana, partidos, modelo, formato) y deriva mesociclos, microciclos y sesiones coherentes, con sus cargas.
-- Permite pedir una **sesión concreta en lenguaje natural** ("esta semana quiero una sesión de conducción en espacio reducido") y la **alinea al macrociclo vigente** — sin inventar un macro si no existe.
-- Dibuja **diagramas SVG** de cada tarea (jugadores, conos, balón, zonas) y de las modalidades adaptadas (vallas, guía en fútbol para ciegos).
-- Guarda el historial y la biblioteca de ejercicios en **JSON portable**, y exporta a documento imprimible (HTML siempre; **PDF** con un clic si instalas WeasyPrint).
+- **Hub de inicio** con 3 entradas: 🗓️ Macrociclos · 📋 Sesiones · 👥 Equipo.
+- **Crear el macrociclo conversando** (entrevista estilo AI-DLC): el agente te hace preguntas (equipo, formato, semanas, fecha de inicio, modelo…) con opciones, explicación y recomendación. Modo **guiado** (paso a paso) o **experto** (una sola frase).
+- **Editar el macrociclo hablando**: "sube el volumen de la semana 5", "marca la semana 8 como descarga", "competencia el 24 de agosto vs Cruz Azul", "cambia el título". Vista previa en vivo.
+- **Macrociclo como matriz tipo Excel**: periodos, mesos, microciclos, **fechas de calendario reales**, fila de **sesiones**, **competencias que cruzan su columna**, rejilla de volumen/capacidades/aspectos; imprimible (apaisado) con colores. Escudo del club como marca de agua.
+- **Crear sesiones conversando** y **editarlas hablando**: "hazla más intensa", "agrega una variante al calentamiento", "agrega otro ejercicio de tiro a puerta", "ponla a 75 minutos", y **"dibuja 5 jugadores en una banda y 5 en otra que conducen y pasan a media cancha"** → genera el diagrama desde tu descripción.
+- **Dos plantillas de hoja**: *Canchero* (oscuro) y *Fútbol Inclusivo* (estilo profesional con encabezado equipo/entrenador/fecha). Se elige automáticamente según el formato (modalidad adaptada → Inclusivo).
+- **Diagramas SVG consistentes**: una sola cancha base por sesión (cancha oficial de fútbol 5 ciegos cuando aplica: vallas, áreas, porterías, tercios), con flechas tipadas (pase punteada, conducción ondulada, carrera sólida), conos y jugadores numerados.
+- **Autodiagnóstico del LLM** en `/diag` (dice si OpenAI está conectado y prueba una llamada real).
+- Historial en **JSON portable**; export a HTML/PDF imprimible.
 - **Seguimiento individual** por jugador (Potenciar / Mejorar / Eliminar).
 
 ## Modalidades soportadas (v1)
@@ -62,7 +67,7 @@ Si no configuras nada, el agente usa el modo determinista (offline, gratis).
 
 ```bash
 pip install hypothesis pytest
-python -m pytest -q            # 89 passed
+python -m pytest -q            # 90 passed
 ```
 
 ## Arquitectura
