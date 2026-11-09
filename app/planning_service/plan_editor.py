@@ -207,8 +207,12 @@ def apply_action(macro: Macrocycle, action: dict) -> tuple[Macrocycle, str]:
 # --------------------------------------------------------------------------- #
 # Interpretación de la instrucción
 # --------------------------------------------------------------------------- #
-def _rules_interpret(text: str) -> dict | None:
-    """Fallback offline por reglas. Devuelve una acción o None si no entiende."""
+def _rules_interpret(text: str, default_year: int | None = None) -> dict | None:
+    """Fallback offline por reglas. Devuelve una acción o None si no entiende.
+
+    default_year: año del macrociclo (de su fecha de inicio); se usa para
+    interpretar fechas sin año (ej. «15 de febrero» -> año del plan, no el actual).
+    """
     t = text.lower().strip()
 
     # ---- título del macrociclo ----
@@ -229,24 +233,38 @@ def _rules_interpret(text: str) -> dict | None:
     if "coordinador" in t:
         return {"accion": "set_coordinator", "texto": _clean_name(text, "coordinador")}
 
-    # ---- fecha de inicio del macro ----
-    if any(w in t for w in ("inicia", "empieza", "arranca", "fecha de inicio", "comienza")):
-        from app.planning_service.calendar_map import parse_spanish_date
-        d = parse_spanish_date(text)
-        if d:
-            return {"accion": "set_start_date", "fecha": d.isoformat()}
+    from app.planning_service.calendar_map import parse_spanish_date
 
-    # ---- competencia / partido ----
+    # ---- competencia / partido (se evalúa ANTES que inicio) ----
     if any(w in t for w in ("competencia", "competición", "competicion", "partido",
                             "juego el", "jugamos", "enfrentamos", "vs ", " vs")):
-        from app.planning_service.calendar_map import parse_spanish_date
-        d = parse_spanish_date(text)
+        d = parse_spanish_date(text, default_year=default_year)
         rival = ""
         mr = re.search(r"(?:vs\.?|contra|frente a)\s+(.+?)(?:\s+el\b|$)", t)
         if mr:
             rival = mr.group(1).strip()
         if d:
             return {"accion": "add_competition", "fecha": d.isoformat(), "rival": rival}
+        return {"accion": "chat",
+                "respuesta": "¿En qué fecha es la competencia? Dímela, por ejemplo: "
+                             "«competencia el 15 de marzo»."}
+
+    # ---- fecha de inicio del macro (SOLO con palabra clave explícita de inicio) ----
+    if any(w in t for w in ("inicia", "empieza", "arranca", "fecha de inicio",
+                            "comienza", "arranque")):
+        d = parse_spanish_date(text, default_year=default_year)
+        if d:
+            return {"accion": "set_start_date", "fecha": d.isoformat()}
+
+    # ---- fecha SUELTA (sin contexto): no adivinar. Pedir aclaración. ----
+    if re.search(r"\d{1,2}\s+de\s+[a-záéíóú]+|\d{1,2}[/-]\d{1,2}", t) and \
+       not any(w in t for w in ("semana", "meso", "volumen", "intensidad", "%")):
+        d = parse_spanish_date(text, default_year=default_year)
+        if d:
+            return {"accion": "chat",
+                    "respuesta": f"¿Qué hago con la fecha {d.strftime('%d/%m/%Y')}? "
+                                 "¿Es una competencia («competencia el …») o la fecha de "
+                                 "inicio del macro («el macro inicia el …»)?"}
 
     week = None
     meso = None
@@ -295,12 +313,19 @@ def _rules_interpret(text: str) -> dict | None:
     return None
 
 
-def _llm_prompt(instruction: str, macro: Macrocycle) -> str:
+def _llm_prompt(instruction: str, macro: Macrocycle, default_year: int | None = None) -> str:
     n = sum(len(m.microcycles) for m in macro.mesocycles)
+    year_hint = (f"El macrociclo es del año {default_year}; si el entrenador da una "
+                 f"fecha sin año, usa {default_year}. " if default_year else "")
     return (
         "Eres el asistente de planificación de un entrenador. Convierte su "
         "instrucción en UNA acción JSON para editar el macrociclo. No expliques, "
         "responde SOLO el JSON.\n"
+        f"{year_hint}"
+        "IMPORTANTE: una fecha SOLA (sin decir si es inicio o competencia) NO cambia "
+        "la fecha de inicio; en ese caso responde con accion 'chat' pidiendo aclarar. "
+        "Solo usa set_start_date si el mensaje dice explícitamente que el macro "
+        "inicia/empieza/arranca en esa fecha.\n"
         f"El macrociclo tiene {len(macro.mesocycles)} mesociclos y {n} semanas (1..{n}).\n"
         "Acciones válidas (elige una):\n"
         '  {"accion":"set_volume","semana":N,"valor":0-100}\n'
@@ -381,15 +406,17 @@ def _split_instructions(text: str) -> list[str]:
     return [p for p in parts if len(p) >= 3]
 
 
-def interpret_many(llm, instruction: str, macro: Macrocycle) -> list[dict]:
+def interpret_many(llm, instruction: str, macro: Macrocycle,
+                   default_year: int | None = None) -> list[dict]:
     """Devuelve una LISTA de acciones (puede traer varias si el mensaje las tiene).
 
     Usa LLM si está activo (puede devolver varias acciones de una); si no, parte
-    el texto por separadores y aplica reglas a cada trozo."""
+    el texto por separadores y aplica reglas a cada trozo.
+    default_year: año del macro para interpretar fechas sin año."""
     enabled = bool(getattr(llm, "is_enabled", lambda: False)()) if llm else False
     if enabled:
         try:
-            res = llm.complete(_llm_prompt(instruction, macro))
+            res = llm.complete(_llm_prompt(instruction, macro, default_year))
             raw = getattr(res, "value", None)
             actions = [a for a in _parse_actions_json(raw or "") if a.get("accion")]
             if actions:
@@ -403,12 +430,12 @@ def interpret_many(llm, instruction: str, macro: Macrocycle) -> list[dict]:
     if len(chunks) > 1:
         out = []
         for chunk in chunks:
-            a = _rules_interpret(chunk)
+            a = _rules_interpret(chunk, default_year)
             if a:
                 out.append(a)
         if out:
             return out
-    whole = _rules_interpret(instruction)
+    whole = _rules_interpret(instruction, default_year)
     return [whole] if whole else []
 
 
@@ -470,7 +497,13 @@ def edit_macro_from_text(llm, macro: Macrocycle, instruction: str,
     acumula los mensajes de confirmación.
     """
     meta = dict(meta or {})
-    actions = [a for a in interpret_many(llm, instruction, macro) if a.get("accion")]
+    # Año del macro (de su fecha de inicio) para interpretar fechas sin año.
+    default_year = None
+    sd = meta.get("start_date", "")
+    if sd and len(sd) >= 4 and sd[:4].isdigit():
+        default_year = int(sd[:4])
+    actions = [a for a in interpret_many(llm, instruction, macro, default_year)
+               if a.get("accion")]
     if not actions:
         return macro, meta, _GENERIC_REPLY
     messages = []
