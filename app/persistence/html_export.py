@@ -512,7 +512,8 @@ _MESO_OBJ_DEFAULT = {
 def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
                      team: str = "", coordinator: str = "", coach: str = "",
                      period_label: str = "", start_date: str = "",
-                     competitions: list | None = None, category: str = "") -> str:
+                     competitions: list | None = None, category: str = "",
+                     days_per_week: int = 0, title_override: str = "") -> str:
     """Matriz de periodización del macrociclo (planilla tipo Excel).
 
     Se adapta a cualquier nº de semanas / frecuencia de partidos (no asume un
@@ -535,10 +536,13 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
         return '<div class="mtx-wrap"><p>El plan no tiene microciclos.</p></div>'
 
     base_title = plan.title.es if lang == "es" else plan.title.en
-    # Título general: "<equipo> — Categoría <cat>" si hay categoría.
-    title = team or base_title
-    if category:
-        title = f"{title} — Categoría {category}"
+    # Título general: override explícito del usuario > equipo + categoría > título base.
+    if title_override:
+        title = title_override
+    else:
+        title = team or base_title
+        if category:
+            title = f"{title} — Categoría {category}"
     competitions = competitions or []
 
     # Mapear cada competencia a la semana del macro (si hay fecha de inicio).
@@ -617,8 +621,8 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
     for m in micros:
         n_sess = len(m.session_slots) if m.session_slots else 0
         if n_sess <= 0:
-            # si el motor no trae slots, estimar por los partidos/semana (mín. 1)
-            n_sess = 3
+            # si el motor no trae slots, usar los días/semana que dio el usuario
+            n_sess = days_per_week if days_per_week and days_per_week > 0 else 3
         ini = counter
         fin = counter + n_sess - 1
         counter = fin + 1

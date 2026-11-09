@@ -211,6 +211,14 @@ def _rules_interpret(text: str) -> dict | None:
     """Fallback offline por reglas. Devuelve una acción o None si no entiende."""
     t = text.lower().strip()
 
+    # ---- título del macrociclo ----
+    if ("titulo" in t or "título" in t or "nombre del macro" in t or "nombre del plan" in t):
+        kw = "título" if "título" in t else ("titulo" if "titulo" in t
+             else ("macro" if "nombre del macro" in t else "plan"))
+        nombre = _clean_name(text, kw)
+        if nombre:
+            return {"accion": "set_title", "texto": nombre}
+
     # ---- metadatos: nombre de equipo / entrenador / coordinador ----
     m = re.search(r"(?:nombre del |nombre de |)equipo\s*(?:a|:|=|es|será|sera)?\s*(.+)", t)
     if "equipo" in t and m and m.group(1).strip():
@@ -411,13 +419,16 @@ def interpret_instruction(llm, instruction: str, macro: Macrocycle) -> dict:
 
 
 _META_ACTIONS = {"set_team", "set_coach", "set_coordinator", "set_start_date",
-                 "add_competition"}
+                 "add_competition", "set_title"}
 
 
 def _apply_meta_action(meta: dict, action: dict) -> tuple[dict, str]:
     """Aplica una acción de metadatos sobre una copia de `meta`. (meta, mensaje)."""
     kind = action["accion"]
     meta = dict(meta)
+    if kind == "set_title":
+        meta["title_override"] = action.get("texto", "").strip()
+        return meta, f"Listo: título del macrociclo → «{meta['title_override']}»."
     if kind == "set_team":
         meta["team"] = action.get("texto", "").strip()
         return meta, f"Listo: nombre del equipo → «{meta['team']}»."

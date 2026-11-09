@@ -228,6 +228,8 @@ def create_app(service: PlanningService):
             start_date=meta.get("start_date", ""),
             competitions=meta.get("competitions", []),
             category=meta.get("category", ""),
+            days_per_week=meta.get("days_per_week", 0),
+            title_override=meta.get("title_override", ""),
         )
         return HTMLResponse(html)
 

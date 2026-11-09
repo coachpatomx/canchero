@@ -244,5 +244,6 @@ def to_plan_input_kwargs(answers: dict) -> dict:
             "category": ("" if a.get("category") in ("__none__", None) else a.get("category", "")),
             "coordinator": a.get("coordinator", ""),
             "coach": a.get("coach", ""),
+            "days_per_week": _int(a.get("days"), 4),
         },
     }
