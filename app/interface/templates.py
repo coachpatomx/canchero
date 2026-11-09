@@ -155,18 +155,48 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
                  'Activa OpenAI/Ollama para sesiones detalladas.</span>')
 
     body = f"""
-<p><a class="btn" href="/roster">👥 Equipo y objetivos</a> &nbsp;
-   <a class="btn" href="/sessions">📚 Historial de sesiones</a> &nbsp; {llm_badge}</p>
+<style>
+  .hub {{ display:flex; gap:16px; flex-wrap:wrap; margin:6px 0 10px; }}
+  .hub-card {{ flex:1 1 240px; background:var(--card); border:1px solid var(--line);
+               border-radius:18px; padding:22px; text-decoration:none; color:var(--ink);
+               transition:.15s; display:block; }}
+  .hub-card:hover {{ border-color:var(--green); transform:translateY(-2px); }}
+  .hub-card .ico {{ font-size:34px; }}
+  .hub-card h3 {{ margin:10px 0 6px; font-size:19px; }}
+  .hub-card p {{ color:var(--muted); font-size:13px; margin:0; line-height:1.5; }}
+  .hub-card .cta {{ display:inline-block; margin-top:12px; color:var(--green); font-weight:700; font-size:13px; }}
+  details.classic > summary {{ cursor:pointer; color:var(--muted); font-size:13px; padding:6px 0; }}
+</style>
+
+<p style="margin:4px 0 2px">¿Qué quieres hacer hoy? &nbsp; {llm_badge}</p>
+<div class="hub">
+  <a class="hub-card" href="/plan/new">
+    <div class="ico">🗓️</div><h3>Macrociclos</h3>
+    <p>Planea la temporada hablando con el agente: periodos, cargas, competencias y fechas.</p>
+    <span class="cta">Crear / abrir →</span>
+  </a>
+  <a class="hub-card" href="/session/new">
+    <div class="ico">📋</div><h3>Sesiones</h3>
+    <p>Arma entrenamientos con diagramas y ajústalos hablando: «hazla más intensa».</p>
+    <span class="cta">Crear / abrir →</span>
+  </a>
+  <a class="hub-card" href="/roster">
+    <div class="ico">👥</div><h3>Equipo</h3>
+    <p>Plantel y desarrollo del deportista. (Módulos multidisciplinarios: próximamente.)</p>
+    <span class="cta">Ver →</span>
+  </a>
+</div>
 
 <div class="card">
-  <h2>📋 Historial de planes</h2>
+  <h2>📋 Planes recientes</h2>
   <ul class="list">{rows}</ul>
+  <p style="margin-top:10px"><a class="back" href="/sessions">📚 Historial de sesiones →</a></p>
 </div>
 
 <div class="card">
   <h2>🗓️ Nuevo plan de temporada</h2>
   <p><a class="btn" href="/plan/new">💬 Crear hablando con el agente (guiado o experto)</a></p>
-  <p class="muted">O usa el formulario clásico de abajo.</p>
+  <details class="classic"><summary>O usar el formulario clásico</summary>
   <form method="get" action="/plan">
     <label>Nombre del plan</label>
     <input name="title" placeholder="Ej. Temporada 2026 Ciegos" required>
@@ -182,12 +212,13 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     </div>
     <button type="submit">⚡ Generar plan</button>
   </form>
+  </details>
 </div>
 
 <div class="card">
   <h2>💬 Nueva sesión</h2>
   <p><a class="btn" href="/session/new">💬 Crear hablando con el agente (guiado)</a></p>
-  <p class="muted">O usa el formulario clásico de abajo.</p>
+  <details class="classic"><summary>O usar el formulario clásico</summary>
   <p class="muted">Describe la sesión en lenguaje natural y afina con las opciones.
   Entre más contexto des (fundamento, material, categoría), mejor queda. Si hay un
   plan activo, la sesión se alinea a su microciclo de la semana.</p>
@@ -234,6 +265,7 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     <input name="materials" placeholder="balones, conos, vallas, balón sonoro, mini-porterías...">
     <button type="submit">✨ Generar sesión</button>
   </form>
+  </details>
 </div>
 """
     return _page("Canchero", lang, body, "Sí la mueve planificando")
