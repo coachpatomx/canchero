@@ -52,14 +52,14 @@ _CSS = """
   * { box-sizing: border-box; }
   body { font-family: var(--font); color: var(--ink); margin: 0; background: var(--bg); }
   header {
-    background: var(--bg-2); color:#fff; padding: 18px 28px;
+    background: var(--bg-2); color:#fff; padding: 26px 36px;
     display:flex; flex-direction:row; align-items:center; justify-content:flex-start;
-    gap:16px; border-bottom:1px solid var(--line);
+    gap:22px; border-bottom:1px solid var(--line);
   }
-  header .logo { display:block; height:60px; width:auto; flex:0 0 auto; }
+  header .logo { display:block; height:92px !important; width:auto !important; flex:0 0 auto; }
   header > div { display:flex; flex-direction:column; justify-content:center; }
-  header h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing:.5px; }
-  header .muted { font-size: 14px; }
+  header h1 { margin: 0; font-size: 42px; font-weight: 800; letter-spacing:.5px; }
+  header .muted { font-size: 17px; }
   .wrap { max-width: 920px; margin: 0 auto; padding: 26px; }
   .card {
     background: var(--card); border-radius: 16px; padding: 20px 22px;
@@ -193,11 +193,19 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
   <p style="margin-top:10px"><a class="back" href="/sessions">📚 Historial de sesiones →</a></p>
 </div>
 
-<div class="card">
-  <h2>🗓️ Nuevo plan de temporada</h2>
-  <p><a class="btn" href="/plan/new">💬 Crear hablando con el agente (guiado o experto)</a></p>
-  <details class="classic"><summary>O usar el formulario clásico</summary>
-  <form method="get" action="/plan">
+"""
+    return _page("Canchero", lang, body, "Sí la mueve planificando")
+
+
+def classic_plan_form(models, formats, lang: str = "es") -> str:
+    """Formulario clásico de plan (desplegable dentro de la entrevista de macro)."""
+    model_opts = "".join(f'<option value="{m.id}">{m.name.es}</option>' for m in models)
+    fmt_opts = "".join(f'<option value="{f.id}">{f.name.es}</option>' for f in formats)
+    cat_opts = "".join(f'<option value="{c}">{c or "— sin especificar —"}</option>' for c in _CATEGORIES)
+    return f"""
+<details class="classic" style="margin-top:14px;max-width:720px;margin-left:auto;margin-right:auto">
+  <summary style="cursor:pointer;color:var(--muted);font-size:13px">O usar el formulario clásico</summary>
+  <form method="get" action="/plan" style="margin-top:8px">
     <label>Nombre del plan</label>
     <input name="title" placeholder="Ej. Temporada 2026 Ciegos" required>
     <div class="row">
@@ -212,22 +220,24 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     </div>
     <button type="submit">⚡ Generar plan</button>
   </form>
-  </details>
-</div>
+</details>
+"""
 
-<div class="card">
-  <h2>💬 Nueva sesión</h2>
-  <p><a class="btn" href="/session/new">💬 Crear hablando con el agente (guiado)</a></p>
-  <details class="classic"><summary>O usar el formulario clásico</summary>
-  <p class="muted">Describe la sesión en lenguaje natural y afina con las opciones.
-  Entre más contexto des (fundamento, material, categoría), mejor queda. Si hay un
-  plan activo, la sesión se alinea a su microciclo de la semana.</p>
-  <form method="get" action="/session">
+
+def classic_session_form(history, formats, lang: str = "es") -> str:
+    """Formulario clásico de sesión (desplegable dentro de la entrevista de sesión)."""
+    fmt_opts = "".join(f'<option value="{f.id}">{f.name.es}</option>' for f in formats)
+    cat_opts = "".join(f'<option value="{c}">{c or "— sin especificar —"}</option>' for c in _CATEGORIES)
+    plan_opts = '<option value="">— sin plan (sesión suelta) —</option>' + "".join(
+        f'<option value="{h.id}">{h.title_es}</option>' for h in history)
+    return f"""
+<details class="classic" style="margin-top:14px;max-width:720px;margin-left:auto;margin-right:auto">
+  <summary style="cursor:pointer;color:var(--muted);font-size:13px">O usar el formulario clásico</summary>
+  <form method="get" action="/session" style="margin-top:8px">
     <label>¿Qué quieres entrenar?</label>
-    <input name="text" placeholder="Ej. sesión de conducción y recepción perfilada en espacio reducido con tiro a puerta" required>
+    <input name="text" placeholder="Ej. conducción y recepción perfilada con tiro a puerta" required>
     <div class="row">
-      <div><label>Vincular a un plan (para alinear cargas)</label>
-        <select name="plan_id">{plan_opts}</select></div>
+      <div><label>Vincular a un plan</label><select name="plan_id">{plan_opts}</select></div>
       <div><label>Semana del plan</label><input name="week_index" placeholder="ej. 3"></div>
     </div>
     <div class="row">
@@ -244,31 +254,21 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
       <div><label>Nº de jugadores</label><input name="n_players" placeholder="según formato"></div>
       <div><label>Horario</label><input name="schedule" placeholder="matutino / 10:00"></div>
     </div>
-    <div class="row">
-      <div><label>Equipo (para la hoja inclusiva)</label><input name="team_name" placeholder="Ej. Ciegos y débiles visuales"></div>
-      <div><label>Entrenador(a)</label><input name="coach_name" placeholder="nombre del entrenador"></div>
-      <div><label>No. de sesión</label><input name="session_number" placeholder="ej. 64"></div>
-    </div>
-    <label>Fundamentos técnicos (elige los que apliquen)</label>
+    <label>Fundamentos técnicos</label>
     {_checkbox_group("technical_focus", _TECNICOS)}
-    <input name="technical_focus_extra" placeholder="Otros fundamentos técnicos (separa con comas)">
-
+    <input name="technical_focus_extra" placeholder="Otros (separa con comas)">
     <label>Fundamentos tácticos</label>
     {_checkbox_group("tactical_focus", _TACTICOS)}
-    <input name="tactical_focus_extra" placeholder="Otros fundamentos tácticos (separa con comas)">
-
+    <input name="tactical_focus_extra" placeholder="Otros (separa con comas)">
     <label>Capacidades físicas</label>
     {_checkbox_group("physical_focus", _FISICOS)}
-    <input name="physical_focus_extra" placeholder="Otras capacidades físicas (separa con comas)">
-
+    <input name="physical_focus_extra" placeholder="Otras (separa con comas)">
     <label>Material disponible</label>
-    <input name="materials" placeholder="balones, conos, vallas, balón sonoro, mini-porterías...">
+    <input name="materials" placeholder="balones, conos, vallas, balón sonoro...">
     <button type="submit">✨ Generar sesión</button>
   </form>
-  </details>
-</div>
+</details>
 """
-    return _page("Canchero", lang, body, "Sí la mueve planificando")
 
 
 # Traducciones de dominio a español (el motor usa claves inglesas internas).
@@ -773,10 +773,21 @@ def render_macro_interview(answers: dict, question: dict | None,
     {"".join(bubbles)}
     {expert_box if mode=="expert" else panel}
   </div>
+  {_classic_plan_block()}
   <p><a class="back" href="/">← Inicio</a></p>
 </div>
 """
     return _page("Nuevo macrociclo", lang, body, "Te guío para armarlo")
+
+
+def _classic_plan_block() -> str:
+    """Form clásico de plan embebido en la entrevista (import perezoso de catálogos)."""
+    try:
+        from app.football_domain import list_formats
+        from periodization_engine.models import list_models
+        return classic_plan_form(list_models(), list_formats())
+    except Exception:
+        return ""
 
 
 def _interview_question_html(q: dict, enc_answers: str, attr_answers: str) -> str:
@@ -970,10 +981,25 @@ def render_session_interview(answers: dict, question: dict | None,
     {"".join(bubbles)}
     {panel}
   </div>
+  {_classic_session_block(plans)}
   <p><a class="back" href="/">← Inicio</a></p>
 </div>
 """
     return _page("Nueva sesión", lang, body, "Te guío para armarla")
+
+
+def _classic_session_block(plans) -> str:
+    """Form clásico de sesión embebido en la entrevista."""
+    try:
+        from app.football_domain import list_formats
+        # 'plans' viene como [{"id","title"}]; classic_session_form usa .id/.title_es
+        class _Ref:
+            def __init__(self, d):
+                self.id = d.get("id", ""); self.title_es = d.get("title", "")
+        hist = [_Ref(p) for p in (plans or [])]
+        return classic_session_form(hist, list_formats())
+    except Exception:
+        return ""
 
 
 def _interview_question_html_sess(q: dict, enc_answers: str, attr_answers: str) -> str:
