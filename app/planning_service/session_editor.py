@@ -159,6 +159,16 @@ def _rules_interpret(text: str) -> dict | None:
     if fase and m:
         return {"accion": "set_block_duration", "fase": fase, "min": int(m.group(1))}
 
+    # agregar un EJERCICIO / BLOQUE nuevo (distinto de agregar una variante)
+    if (("ejercicio" in t or "bloque" in t or "actividad" in t)
+            and any(w in t for w in ("agrega", "añade", "anade", "otro", "otra",
+                                     "nuevo", "nueva", "mete", "pon un", "pon otro"))
+            and "variante" not in t):
+        # El tema opcional: lo que va después de "de"/"sobre".
+        mt = re.search(r"(?:de|sobre|para)\s+(.+)$", t)
+        tema = mt.group(1).strip() if mt else ""
+        return {"accion": "add_block", "tema": tema}
+
     # agregar variante
     if "variante" in t or "agrega" in t or "añade" in t or "anade" in t:
         fase = _fase_en(t) or "parte_principal"
@@ -206,6 +216,7 @@ def _llm_prompt(instruction: str, doc) -> str:
         '  {"accion":"set_duration","total":minutos}\n'
         '  {"accion":"set_block_duration","fase":"calentamiento|parte_principal|juego|vuelta_calma","min":N}\n'
         '  {"accion":"add_variant","fase":"...","texto":"..."}\n'
+        '  {"accion":"add_block","tema":"tema del nuevo ejercicio (opcional)"}  (agregar un ejercicio/bloque nuevo)\n'
         '  {"accion":"set_objective","texto":"..."}\n'
         '  {"accion":"intensify"}  |  {"accion":"soften"}\n'
         '  {"accion":"chat","respuesta":"texto amable"}  (si no es una orden de edición)\n'
@@ -240,4 +251,48 @@ def edit_session_from_text(llm, doc, instruction: str) -> tuple[object, str]:
         action = _rules_interpret(instruction) or {"accion": ""}
     if not action.get("accion"):
         return doc, _GENERIC
+    # add_block necesita el LLM (o un bloque base sin él): se maneja aquí.
+    if action.get("accion") == "add_block":
+        return _add_block(llm, doc, action.get("tema", ""), enabled)
     return apply_session_action(doc, action)
+
+
+def _add_block(llm, doc, tema: str, enabled: bool) -> tuple[object, str]:
+    """Agrega un ejercicio/bloque nuevo. Con LLM lo genera completo (con diagrama);
+    sin LLM agrega un bloque base (cancha vacía) para llenar a mano."""
+    blocks = _blocks(doc)
+    nuevo = None
+    if enabled:
+        prompt = (
+            "Devuelve SOLO un JSON con UN bloque de ejercicio de fútbol para añadir "
+            "a una sesión. Esquema: {\"nombre\":\"\",\"fase\":\"parte_principal\","
+            "\"duracion_min\":15,\"dimensiones\":\"30x20 m\",\"descripcion\":\"pasos "
+            "claros\",\"variantes\":[\"\"],\"materiales\":[\"\"],\"aspectos\":{\"tecnico\":"
+            "[],\"tactico\":[],\"fisico\":[],\"psicologico\":[]},\"diagrama\":{\"ancho_m\":30,"
+            "\"alto_m\":20,\"jugadores\":[{\"x\":0,\"y\":0,\"equipo\":\"a\",\"num\":1}],"
+            "\"conos\":[],\"porterias\":[],\"balones\":[],\"flechas\":[{\"tipo\":\"pase|"
+            "conduccion|carrera\",\"x1\":0,\"y1\":0,\"x2\":0,\"y2\":0}]}}. "
+            "Coordenadas en metros (origen esquina inferior izquierda)."
+            + (f' Tema del ejercicio: "{tema}".' if tema else "")
+        )
+        try:
+            res = llm.complete(prompt)
+            nuevo = _parse(getattr(res, "value", "") or "")
+        except Exception:
+            nuevo = None
+    if not nuevo or not isinstance(nuevo, dict) or not nuevo.get("nombre"):
+        # Bloque base (sin LLM o si falló): el entrenador lo completa.
+        nuevo = {
+            "nombre": (tema.capitalize() if tema else "Nuevo ejercicio"),
+            "fase": "parte_principal", "duracion_min": 15, "dimensiones": "30x20 m",
+            "descripcion": ("Describe aquí el ejercicio" + (f" de {tema}." if tema else ".")),
+            "variantes": [], "materiales": [],
+            "diagrama": {"ancho_m": 30, "alto_m": 20},
+        }
+        aviso = " (bloque base; con OpenAI lo genero con detalle y diagrama)."
+    else:
+        aviso = "."
+    blocks.append(nuevo)
+    from dataclasses import replace as _replace
+    return _replace(doc, rich_blocks=tuple(blocks)), \
+        f"Listo: agregué el ejercicio «{nuevo.get('nombre')}»{aviso}"
