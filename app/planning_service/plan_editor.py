@@ -30,6 +30,16 @@ from periodization_engine import Macrocycle, Mesocycle, Microcycle, MicrocycleTy
 _VOL_MIN, _VOL_MAX = 10, 100
 _INT_MIN, _INT_MAX = 10, 100
 
+# Respuesta genérica amable cuando no es una orden de edición o es fuera de tema.
+# Evita que el chat se "bugue" o conteste cosas raras.
+_GENERIC_REPLY = (
+    "Soy tu asistente de planificación. Puedo ajustar el macrociclo por ti: "
+    "cambiar volumen o intensidad de una semana o mesociclo, marcar una semana "
+    "como descarga, cambiar objetivos, poner el nombre del equipo, la fecha de "
+    "inicio o registrar competencias. ¿Qué quieres mover? Por ejemplo: "
+    "«sube el volumen de la semana 5» o «competencia el 24 de agosto vs Cruz Azul»."
+)
+
 # Sinónimos de "descarga/recuperación" -> tipo de microciclo.
 _TYPE_WORDS = {
     "descarga": "recovery", "recuperacion": "recovery", "recuperación": "recovery",
@@ -107,7 +117,10 @@ def apply_action(macro: Macrocycle, action: dict) -> tuple[Macrocycle, str]:
     """Aplica una acción estructurada. Devuelve (macro, mensaje_es)."""
     kind = str(action.get("accion", "")).strip()
     if not kind:
-        return macro, "No entendí qué cambio hacer. Intenta: «sube el volumen de la semana 5»."
+        return macro, _GENERIC_REPLY
+    if kind == "chat":
+        # Respuesta conversacional (saludo, duda, fuera de tema). No toca el macro.
+        return macro, (action.get("respuesta") or _GENERIC_REPLY)
 
     # ---- acciones por SEMANA ----
     if "semana" in action and action.get("semana") is not None:
@@ -294,10 +307,14 @@ def _llm_prompt(instruction: str, macro: Macrocycle) -> str:
         '  {"accion":"set_coordinator","texto":"nombre del coordinador"}\n'
         '  {"accion":"set_start_date","fecha":"YYYY-MM-DD"}  (fecha de inicio del macro)\n'
         '  {"accion":"add_competition","fecha":"YYYY-MM-DD","rival":"rival (opcional)"}\n'
+        '  {"accion":"chat","respuesta":"texto breve y amable"}  (úsalo cuando el '
+        "mensaje NO sea una orden de edición: saludos, preguntas, dudas o cosas fuera "
+        "de tema; responde en español como un asistente de planificación, orientando "
+        "sobre lo que SÍ puedes hacer, sin inventar cambios)\n"
         "Interpreta fechas en español (ej. '20 de agosto de 2026' -> 2026-08-20).\n"
         "Si el mensaje contiene VARIAS instrucciones, devuélvelas TODAS en una "
         'lista: {"acciones":[ {..}, {..} ]}. Si es una sola, puedes devolver el '
-        "objeto directo. Si no puedes mapear nada, responde {\"accion\":\"\"}.\n"
+        "objeto directo. NUNCA respondas texto fuera del JSON.\n"
         f'Mensaje del entrenador: "{instruction}"\n'
         "JSON:"
     )
@@ -444,17 +461,13 @@ def edit_macro_from_text(llm, macro: Macrocycle, instruction: str,
     meta = dict(meta or {})
     actions = [a for a in interpret_many(llm, instruction, macro) if a.get("accion")]
     if not actions:
-        return macro, meta, (
-            "No pude interpretar la instrucción. Prueba con algo como: "
-            "«ponle el nombre del equipo: Club América», «el macro inicia el 10 de agosto de 2026», "
-            "«tengo competencia el 20 de agosto vs Cruz Azul», «sube el volumen de la semana 5», "
-            "«marca la semana 8 como descarga». Puedes pedir varias cosas a la vez.")
+        return macro, meta, _GENERIC_REPLY
     messages = []
     for action in actions:
         if action.get("accion") in _META_ACTIONS:
             meta, msg = _apply_meta_action(meta, action)
         else:
-            macro, msg = apply_action(macro, action)
+            macro, msg = apply_action(macro, action)  # incluye 'chat'
         messages.append(msg)
     # Un solo mensaje si fue una acción; lista con viñetas si fueron varias.
     if len(messages) == 1:

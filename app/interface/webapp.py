@@ -248,7 +248,8 @@ def create_app(service: PlanningService):
             return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
         meta = {"team": team, "coordinator": coordinator, "coach": coach,
                 "period_label": period_label}
-        return HTMLResponse(render_plan_studio(plan, lang, _chat.get(plan_id, []), meta))
+        _llm_on = bool(getattr(service.llm, "is_enabled", lambda: False)())
+        return HTMLResponse(render_plan_studio(plan, lang, _chat.get(plan_id, []), meta, _llm_on))
 
     @app.get("/plan/{plan_id}/chat/apply", response_class=HTMLResponse)
     def plan_studio_apply(plan_id: str, instruction: str = "", lang: str = "es",
@@ -278,8 +279,9 @@ def create_app(service: PlanningService):
                 pass  # si falla el guardado, al menos la cache queda actualizada
             hist.append({"role": "assistant", "text": message})
         # Recargar meta para que el estudio y la vista previa reflejen los cambios.
+        _llm_on = bool(getattr(service.llm, "is_enabled", lambda: False)())
         return HTMLResponse(render_plan_studio(plan, lang, hist,
-                                               service.repo.load_plan_meta(plan_id)))
+                                               service.repo.load_plan_meta(plan_id), _llm_on))
 
     @app.get("/plan/{plan_id}", response_class=HTMLResponse)
     def view_plan(plan_id: str, lang: str = "es"):

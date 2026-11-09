@@ -528,11 +528,15 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
 # El entrenador escribe un ajuste en lenguaje natural y ve el cambio al instante.
 # --------------------------------------------------------------------------- #
 def render_plan_studio(plan, lang: str = "es", chat_history=None,
-                       meta: dict | None = None) -> str:
+                       meta: dict | None = None, llm_on: bool = False) -> str:
     meta = meta or {}
     title = plan.title.es if lang == "es" else plan.title.en
     pid = plan.id
     history = chat_history or []
+    ia_badge = ('<span style="color:#22c55e;font-size:12px">✨ IA activa (OpenAI)</span>'
+                if llm_on else
+                '<span style="color:#f9a825;font-size:12px">⚙️ modo reglas (sin IA) — '
+                'activa OpenAI para un chat más listo</span>')
 
     # Burbujas del chat.
     bubbles = []
@@ -587,7 +591,7 @@ def render_plan_studio(plan, lang: str = "es", chat_history=None,
     <div style="flex:1 1 360px;min-width:320px;display:flex;flex-direction:column;
                 border-right:1px solid var(--line);background:#0e1116">
       <div style="padding:14px 16px;border-bottom:1px solid var(--line)">
-        <b>💬 Ajusta el macrociclo hablando</b>
+        <b>💬 Ajusta el macrociclo hablando</b> &nbsp; {ia_badge}
         <div class="muted" style="font-size:12px">{_esc_studio(title)}</div>
       </div>
       <div style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column">
