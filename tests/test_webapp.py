@@ -61,11 +61,13 @@ def test_view_saved_plan_from_history():
         "title": "Mi plan", "duration_weeks": "12", "training_days_per_week": "4",
         "matches_per_week": "1", "model_id": "traditional", "format_id": "football_11",
     })
-    home = c.get("/").text
-    assert "Mi plan" in home  # aparece en el historial con su nombre
+    # Los planes recientes ahora viven en la sección de Macrociclos (/plan/new),
+    # no en el inicio (que quedó con las 3 tarjetas del hub).
+    section = c.get("/plan/new").text
+    assert "Mi plan" in section  # aparece en el historial con su nombre
     # el historial enlaza a /plan/{id}; extraer un id y abrirlo
     import re
-    m = re.search(r'/plan/([0-9a-f]+)"', home)
+    m = re.search(r'/plan/([0-9a-f]+)"', section)
     assert m, "no se encontró enlace de plan en el historial"
     r = c.get(f"/plan/{m.group(1)}")
     assert r.status_code == 200

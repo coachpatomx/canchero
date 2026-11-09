@@ -186,13 +186,6 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
     <span class="cta">Ver →</span>
   </a>
 </div>
-
-<div class="card">
-  <h2>📋 Planes recientes</h2>
-  <ul class="list">{rows}</ul>
-  <p style="margin-top:10px"><a class="back" href="/sessions">📚 Historial de sesiones →</a></p>
-</div>
-
 """
     return _page("Canchero", lang, body, "Sí la mueve planificando")
 
@@ -767,7 +760,9 @@ def render_macro_interview(answers: dict, question: dict | None,
   .ib-star {{ color:#f9c80e; font-weight:700; }}
 </style>
 <div class="ib-wrap">
-  <h2 style="font-weight:800">🗓️ Nuevo macrociclo</h2>
+  <h2 style="font-weight:800">🗓️ Macrociclos</h2>
+  {_recent_plans_block()}
+  <h3 style="font-weight:800;margin:18px 0 8px">Nuevo macrociclo</h3>
   {mode_toggle}
   <div class="ib-chat">
     {"".join(bubbles)}
@@ -777,7 +772,45 @@ def render_macro_interview(answers: dict, question: dict | None,
   <p><a class="back" href="/">← Inicio</a></p>
 </div>
 """
-    return _page("Nuevo macrociclo", lang, body, "Te guío para armarlo")
+    return _page("Macrociclos", lang, body, "Tus planes y uno nuevo")
+
+
+def _recent_plans_block() -> str:
+    """Lista de planes recientes (para la sección de Macrociclos)."""
+    try:
+        from app.persistence import JsonFileRepository  # noqa: F401
+    except Exception:
+        pass
+    rows = _load_recent_plans_html()
+    if not rows:
+        return ""
+    return (
+        '<div class="card" style="max-width:720px;margin:0 auto">'
+        '<h2>📋 Tus planes</h2><ul class="list">' + rows + '</ul></div>'
+    )
+
+
+# El repo real se inyecta desde webapp al arrancar; guardamos una referencia.
+_REPO_REF = {"repo": None}
+
+
+def set_repo_ref(repo):
+    _REPO_REF["repo"] = repo
+
+
+def _load_recent_plans_html() -> str:
+    repo = _REPO_REF.get("repo")
+    if repo is None:
+        return ""
+    try:
+        hist = repo.list_history()
+    except Exception:
+        return ""
+    return "".join(
+        f'<li><a class="back" href="/plan/{h.id}"><b>{_esc_studio(h.title_es)}</b></a> '
+        f"<span class='muted'>· {h.model_id} / {h.format_id} · {h.created_at[:10]}</span></li>"
+        for h in hist
+    )
 
 
 def _classic_plan_block() -> str:
@@ -976,7 +1009,9 @@ def render_session_interview(answers: dict, question: dict | None,
   .ib-star {{ color:#f9c80e; font-weight:700; }}
 </style>
 <div class="ib-wrap">
-  <h2 style="font-weight:800">📋 Nueva sesión</h2>
+  <h2 style="font-weight:800">📋 Sesiones</h2>
+  {_recent_sessions_block()}
+  <h3 style="font-weight:800;margin:18px 0 8px">Nueva sesión</h3>
   <div class="ib-chat">
     {"".join(bubbles)}
     {panel}
@@ -985,7 +1020,31 @@ def render_session_interview(answers: dict, question: dict | None,
   <p><a class="back" href="/">← Inicio</a></p>
 </div>
 """
-    return _page("Nueva sesión", lang, body, "Te guío para armarla")
+    return _page("Sesiones", lang, body, "Tus sesiones y una nueva")
+
+
+def _recent_sessions_block() -> str:
+    """Historial de sesiones (para la sección de Sesiones)."""
+    repo = _REPO_REF.get("repo")
+    if repo is None:
+        return ""
+    try:
+        sess = repo.list_sessions()
+    except Exception:
+        return ""
+    if not sess:
+        return ('<div class="card" style="max-width:720px;margin:0 auto">'
+                '<h2>📚 Tus sesiones</h2><p class="muted">Aún no hay sesiones. '
+                '¡Crea la primera abajo!</p></div>')
+    rows = "".join(
+        f'<li><a class="back" href="/session/{s.get("id")}/view">'
+        f'<b>{_esc_studio(s.get("title","Sesión"))}</b></a> '
+        f'<span class="muted">· {"✨ IA" if s.get("source")=="llm" else "base"}'
+        f' · sem {s.get("week","-")}</span></li>'
+        for s in reversed(sess)
+    )
+    return ('<div class="card" style="max-width:720px;margin:0 auto">'
+            f'<h2>📚 Tus sesiones</h2><ul class="list">{rows}</ul></div>')
 
 
 def _classic_session_block(plans) -> str:

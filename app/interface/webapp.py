@@ -40,6 +40,9 @@ def create_app(service: PlanningService):
     from fastapi.responses import HTMLResponse, Response
 
     app = FastAPI(title="Canchero")
+    # Dar a las plantillas acceso al repo para listar planes/sesiones recientes.
+    from .templates import set_repo_ref
+    set_repo_ref(service.repo)
     _plans: dict[str, object] = {}       # cache en memoria de la sesión web
     _sessions: dict[str, object] = {}
     _session_order: list[str] = []       # historial de sesiones (orden)
