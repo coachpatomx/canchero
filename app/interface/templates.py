@@ -658,7 +658,9 @@ def render_macro_interview(answers: dict, question: dict | None,
     from app.planning_service import macro_interview as mi
 
     answers = answers or {}
-    enc = urllib.parse.quote(json.dumps(answers, ensure_ascii=False))
+    raw_json = json.dumps(answers, ensure_ascii=False)
+    enc = urllib.parse.quote(raw_json)        # para HREFs (GET por enlace)
+    attr_json = _esc_studio(raw_json)         # para value="" de <input hidden> (sin URL-encode)
 
     # Historial: lo ya respondido como burbujas.
     bubbles = [
@@ -684,11 +686,11 @@ def render_macro_interview(answers: dict, question: dict | None,
             '<div class="ib-bot"><b>¡Listo!</b> Esto es lo que capturé:<br>'
             f'{_esc_studio(mi.summary(answers))}</div>'
             f'<form method="get" action="/plan/new/create" style="margin-top:10px">'
-            f'<input type="hidden" name="answers" value="{enc}">'
+            f'<input type="hidden" name="answers" value="{attr_json}">'
             f'<button type="submit" style="margin:0">⚡ Generar macrociclo</button></form>'
         )
     else:
-        panel = _interview_question_html(question, enc)
+        panel = _interview_question_html(question, enc, attr_json)
 
     mode_toggle = (
         f'<div style="margin-bottom:10px;font-size:12px">'
@@ -738,8 +740,12 @@ def render_macro_interview(answers: dict, question: dict | None,
     return _page("Nuevo macrociclo", lang, body, "Te guío para armarlo")
 
 
-def _interview_question_html(q: dict, enc_answers: str) -> str:
-    """Renderiza la pregunta actual con sus opciones (si las hay)."""
+def _interview_question_html(q: dict, enc_answers: str, attr_answers: str) -> str:
+    """Renderiza la pregunta actual con sus opciones (si las hay).
+
+    enc_answers: JSON URL-encoded, para los HREF (enlaces GET de opciones).
+    attr_answers: JSON escapado para atributo HTML, para el value de <input hidden>.
+    """
     out = [f'<div class="ib-bot">{_esc_studio(q["texto"])}</div>']
     tipo = q.get("tipo")
     base = f'/plan/new/answer?step={q["id"]}&answers={enc_answers}&value='
@@ -765,7 +771,7 @@ def _interview_question_html(q: dict, enc_answers: str) -> str:
         out.append(
             f'<form method="get" action="/plan/new/answer" style="display:flex;gap:8px;margin-top:8px">'
             f'<input type="hidden" name="step" value="{q["id"]}">'
-            f'<input type="hidden" name="answers" value="{enc_answers}">'
+            f'<input type="hidden" name="answers" value="{attr_answers}">'
             f'<input name="value" type="{itype}" placeholder="{_esc_studio(q.get("placeholder",""))}" '
             f'style="flex:1;margin:0" autofocus required>'
             f'<button type="submit" style="margin:0">➤</button></form>'
