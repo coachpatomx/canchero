@@ -165,6 +165,20 @@ class JsonFileRepository:
     def list_sessions(self) -> list[dict]:
         return self._read_sessions_index()
 
+    def update_session(self, sid: str, session) -> None:
+        """Reescribe una sesión existente (edición por chat) sin crear id nuevo.
+        Actualiza también el título del índice si cambió el objetivo."""
+        from .plan import _session_to_dict
+        path = os.path.join(self.sessions_dir, f"{sid}.json")
+        _atomic_write(path, _session_to_dict(session))
+        index = self._read_sessions_index()
+        for row in index:
+            if row.get("id") == sid:
+                row["title"] = session.objective.es or row.get("title", "Sesión")
+                row["source"] = getattr(session, "source", row.get("source", ""))
+                break
+        _atomic_write(self.sessions_index_path, index)  # type: ignore[arg-type]
+
     def load_session(self, sid: str):
         from .plan import _session_from_dict
         path = os.path.join(self.sessions_dir, f"{sid}.json")

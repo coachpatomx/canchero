@@ -28,6 +28,7 @@ from .templates import (
     render_plan_studio,
     render_roster,
     render_session,
+    render_session_studio,
     render_sessions_history,
 )
 
@@ -42,7 +43,8 @@ def create_app(service: PlanningService):
     _sessions: dict[str, object] = {}
     _session_order: list[str] = []       # historial de sesiones (orden)
     _state: dict[str, str] = {"active_plan_id": "", "active_category": ""}
-    _chat: dict[str, list] = {}          # historial de chat del estudio, por plan_id
+    _chat: dict[str, list] = {}          # historial de chat del estudio (macro), por plan_id
+    _session_chat: dict[str, list] = {}  # historial de chat del estudio de sesión, por sid
 
     # Sirve los archivos estáticos (logo Canchero, favicon) desde app/interface/static
     import os
@@ -430,6 +432,45 @@ def create_app(service: PlanningService):
         from app.planning_service import Alignment
         return HTMLResponse(render_session(doc, Alignment.FULL, lang,
                                            pdf_available=is_pdf_available(), sid=sid))
+
+    @app.get("/session/{sid}/preview", response_class=HTMLResponse)
+    def preview_session(sid: str, lang: str = "es"):
+        """Solo el cuerpo imprimible de la sesión (para el iframe del estudio)."""
+        doc = _get_session(sid)
+        if doc is None:
+            return HTMLResponse("<p>No encontrada</p>", status_code=404)
+        from app.persistence.html_export import session_body_html
+        return HTMLResponse(session_body_html(doc, lang))
+
+    @app.get("/session/{sid}/chat", response_class=HTMLResponse)
+    def session_studio(sid: str, lang: str = "es"):
+        doc = _get_session(sid)
+        if doc is None:
+            return HTMLResponse("<p>Sesión no encontrada</p>", status_code=404)
+        _llm_on = bool(getattr(service.llm, "is_enabled", lambda: False)())
+        return HTMLResponse(render_session_studio(
+            doc, sid, lang, _session_chat.get(sid, []), _llm_on))
+
+    @app.get("/session/{sid}/chat/apply", response_class=HTMLResponse)
+    def session_studio_apply(sid: str, instruction: str = "", lang: str = "es"):
+        doc = _get_session(sid)
+        if doc is None:
+            return HTMLResponse("<p>Sesión no encontrada</p>", status_code=404)
+        hist = _session_chat.setdefault(sid, [])
+        instruction = (instruction or "").strip()
+        if instruction:
+            from app.planning_service.session_editor import edit_session_from_text
+            hist.append({"role": "user", "text": instruction})
+            new_doc, message = edit_session_from_text(service.llm, doc, instruction)
+            _sessions[sid] = new_doc
+            try:
+                service.repo.update_session(sid, new_doc)
+            except Exception:
+                pass
+            hist.append({"role": "assistant", "text": message})
+            doc = new_doc
+        _llm_on = bool(getattr(service.llm, "is_enabled", lambda: False)())
+        return HTMLResponse(render_session_studio(doc, sid, lang, hist, _llm_on))
 
     @app.get("/session/{sid}/pdf")
     def pdf_session_route(sid: str, lang: str = "es"):

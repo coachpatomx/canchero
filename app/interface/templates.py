@@ -507,6 +507,7 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
     color = {"full": "#2e7d32", "partial": "#f9a825", "none": "#c62828"}[alignment.value]
     from app.persistence.html_export import session_body_html
     inner = session_body_html(doc, lang)
+    chat_link = f'<a class="btn" href="/session/{sid}/chat">💬 Editar con el agente</a>' if sid else ""
     print_link = f'<a class="btn" href="/session/{sid}/print" target="_blank">🖨️ Imprimir / PDF</a>' if sid else ""
     pdf_btn = (
         f'<a class="btn" href="/session/{sid}/pdf">⬇ Descargar PDF</a> {print_link}'
@@ -519,7 +520,7 @@ def render_session(doc, alignment: Alignment, lang: str = "es", pdf_available: b
     elif getattr(doc, "source", "") == "deterministic":
         src_badge = '<span class="muted" style="margin-left:10px">estructura base (sin IA)</span>'
     banner = f'<div class="banner" style="background:{color}">{align_msg}{src_badge}</div>'
-    body = f'{banner}{inner}<p>{pdf_btn} &nbsp; <a class="back" href="/">← {_t("Inicio","Home",lang)}</a></p>'
+    body = f'{banner}{inner}<p>{chat_link} {pdf_btn} &nbsp; <a class="back" href="/">← {_t("Inicio","Home",lang)}</a></p>'
     return _page(_t("Sesión", "Session", lang), lang, body)
 
 
@@ -783,3 +784,92 @@ def _interview_question_html(q: dict, enc_answers: str, attr_answers: str) -> st
     if q.get("recomendacion"):
         out.append(f'<div class="ib-rec">💡 {_esc_studio(q["recomendacion"])}</div>')
     return "".join(out)
+
+
+# --------------------------------------------------------------------------- #
+# Estudio de SESIÓN: chat iterativo (izquierda) + vista previa de la hoja (dcha).
+# Análogo a render_plan_studio pero para una SessionDoc.
+# --------------------------------------------------------------------------- #
+def render_session_studio(doc, sid: str, lang: str = "es", chat_history=None,
+                          llm_on: bool = False) -> str:
+    history = chat_history or []
+    title = doc.objective.es if lang == "es" else doc.objective.en
+    ia_badge = ('<span style="color:#22c55e;font-size:12px">✨ IA activa (OpenAI)</span>'
+                if llm_on else
+                '<span style="color:#f9a825;font-size:12px">⚙️ modo reglas (sin IA)</span>')
+    estilo = getattr(doc, "sheet_style", "dark")
+    estilo_txt = "Fútbol Inclusivo" if estilo == "inclusivo" else "Canchero"
+
+    bubbles = []
+    for msg in history:
+        who = msg.get("role", "user")
+        text = _esc_studio(msg.get("text", ""))
+        if who == "user":
+            bubbles.append(
+                f'<div style="align-self:flex-end;background:#22c55e;color:#06220f;'
+                f'padding:9px 13px;border-radius:14px 14px 2px 14px;max-width:85%;'
+                f'margin:4px 0;font-size:14px">{text}</div>')
+        else:
+            bubbles.append(
+                f'<div style="align-self:flex-start;background:#1b2330;color:#e7edf3;'
+                f'padding:9px 13px;border-radius:14px 14px 14px 2px;max-width:85%;'
+                f'margin:4px 0;font-size:14px">{text}</div>')
+    if not bubbles:
+        bubbles.append(
+            '<div style="align-self:flex-start;background:#1b2330;color:#9fb0c0;'
+            'padding:9px 13px;border-radius:14px;max-width:92%;margin:4px 0;font-size:14px">'
+            '¡Hola! Puedo ajustar esta sesión. Por ejemplo:<br>'
+            '• «hazla más intensa» / «más suave»<br>'
+            '• «agrega una variante al calentamiento»<br>'
+            '• «pon el calentamiento a 20 min» / «ponla a 75 minutos»<br>'
+            '• «cambia la plantilla a Inclusivo»</div>')
+
+    import urllib.parse
+    chips = (
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">'
+        + "".join(
+            f'<a href="/session/{sid}/chat/apply?instruction={urllib.parse.quote(c)}" '
+            f'style="background:#1b2330;color:#9fb0c0;border:1px solid #2a3647;'
+            f'border-radius:999px;padding:5px 11px;font-size:12px;text-decoration:none">{c}</a>'
+            for c in ("hazla más intensa", "agrega una variante al calentamiento",
+                      "cambia la plantilla a Inclusivo")
+        ) + "</div>"
+    )
+    preview_url = f"/session/{sid}/preview"
+
+    body = f"""
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="display:flex;min-height:72vh;flex-wrap:wrap">
+    <div style="flex:1 1 360px;min-width:320px;display:flex;flex-direction:column;
+                border-right:1px solid var(--line);background:#0e1116">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--line)">
+        <b>💬 Ajusta la sesión hablando</b> &nbsp; {ia_badge}
+        <div class="muted" style="font-size:12px">Plantilla: {estilo_txt}</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column">
+        {"".join(bubbles)}
+      </div>
+      <div style="padding:12px 14px;border-top:1px solid var(--line)">
+        {chips}
+        <form method="get" action="/session/{sid}/chat/apply" style="display:flex;gap:8px;margin:0">
+          <input name="instruction" placeholder="Escribe tu ajuste…" autofocus
+                 style="flex:1;margin:0" required>
+          <button type="submit" style="margin:0">➤</button>
+        </form>
+      </div>
+    </div>
+    <div style="flex:2 1 520px;min-width:360px;background:#fff">
+      <div style="padding:8px 12px;background:#161b22;color:#9fb0c0;font-size:12px;
+                  display:flex;justify-content:space-between;align-items:center">
+        <span>Vista previa de la hoja (se actualiza con cada cambio)</span>
+        <a class="btn" href="/session/{sid}/print" target="_blank"
+           style="margin:0;padding:6px 12px;font-size:12px">🖨️ Abrir / Imprimir</a>
+      </div>
+      <iframe src="{preview_url}" style="width:100%;height:68vh;border:0;background:#fff"></iframe>
+    </div>
+  </div>
+</div>
+<p><a class="back" href="/session/{sid}/view">← Ver sesión</a> &nbsp;
+   <a class="back" href="/">Inicio</a></p>
+"""
+    return _page(f"Estudio de sesión", lang, body, "Edita conversando con el agente")
