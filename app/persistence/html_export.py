@@ -369,6 +369,13 @@ def _inclusivo_html(session: SessionDoc, lang: str = "es") -> str:
         fase_key = str(b.get("fase", ""))
         diagrama = b.get("diagrama")
         if render_drill and has_drill_data and has_drill_data(diagrama):
+            # Cancha CONSISTENTE: en la plantilla inclusiva todos los bloques usan
+            # la misma cancha base (ciegos 40x20). Normalizamos las dimensiones del
+            # diagrama para que la base se vea igual en toda la sesión.
+            if pitch_mode == "blind":
+                diagrama = dict(diagrama)
+                diagrama["ancho_m"] = 40
+                diagrama["alto_m"] = 20
             diag_html = render_drill(diagrama, clean=False, pitch=pitch_mode)
         elif fase_key == "vuelta_calma":
             # Estiramientos: imagen genérica (no necesita cancha).

@@ -84,6 +84,19 @@ def apply_session_action(doc, action: dict) -> tuple[object, str]:
         return replace(doc, objective=I18nText(txt, doc.objective.en)), \
             "Listo: objetivo de la sesión actualizado."
 
+    if kind == "set_session_number":
+        val = str(action.get("valor", "")).strip()
+        return replace(doc, session_number=val), f"Listo: número de sesión {val}."
+    if kind == "set_coach":
+        val = str(action.get("texto", "")).strip()
+        return replace(doc, coach_name=val), f"Listo: entrenador → «{val}»."
+    if kind == "set_team":
+        val = str(action.get("texto", "")).strip()
+        return replace(doc, team_name=val), f"Listo: equipo → «{val}»."
+    if kind == "set_schedule":
+        val = str(action.get("texto", "")).strip()
+        return replace(doc, schedule=val), f"Listo: horario {val}."
+
     blocks = _blocks(doc)
     if not blocks:
         return doc, ("Esta sesión aún no tiene bloques detallados (se generó sin IA). "
@@ -137,6 +150,30 @@ def _int(v, default=0):
 
 def _rules_interpret(text: str) -> dict | None:
     t = text.lower().strip()
+
+    # número de sesión
+    m = re.search(r"(?:n[uú]mero|no\.?|num\.?)\s*(?:de\s*)?(?:sesi[oó]n)?\s*(\d+)", t)
+    if ("sesi" in t or "número" in t or "numero" in t or "no." in t) and m and "duraci" not in t:
+        return {"accion": "set_session_number", "valor": m.group(1)}
+
+    # entrenador(a)
+    if "entrenador" in t:
+        mt = re.search(r"entrenador(?:\(a\)|a)?\s*(?:a|:|=|es|pon(?:le)?|poner)?\s*(.+)$", text, re.I)
+        nombre = _clean_tail(text, "entrenador")
+        if nombre:
+            return {"accion": "set_coach", "texto": nombre}
+
+    # equipo (nombre)
+    if "equipo" in t:
+        nombre = _clean_tail(text, "equipo")
+        if nombre:
+            return {"accion": "set_team", "texto": nombre}
+
+    # horario
+    if "horario" in t or "hora" in t:
+        mt = re.search(r"(\d{1,2}(?::\d{2})?\s*(?:a|-|–)\s*\d{1,2}(?::\d{2})?|\d{1,2}(?::\d{2})?\s*(?:am|pm|hrs|hs|h)?)", t)
+        if mt and ("horario" in t or "hora" in t):
+            return {"accion": "set_schedule", "texto": mt.group(1).strip()}
 
     # plantilla / estilo de hoja
     if "plantilla" in t or "inclusiv" in t or "canchero" in t or "hoja" in t:
@@ -212,6 +249,24 @@ def _fase_en(t: str) -> str | None:
     return None
 
 
+def _clean_tail(text: str, keyword: str) -> str:
+    """Extrae el valor después de la palabra clave, conservando mayúsculas.
+    Corta si aparece otra instrucción pegada (ej. «y número de sesión»)."""
+    low = text.lower()
+    idx = low.find(keyword)
+    if idx == -1:
+        return ""
+    rest = text[idx + len(keyword):]
+    rest = re.sub(r"^\s*(?:\(a\)|a)?\s*(?::|=|,|-|es|pon(?:le)?|poner|será|sera|a)?\s*", "", rest, flags=re.I)
+    # cortar antes de otra instrucción
+    for mk in (r"\by\s+(?:n[uú]mero|no\.|entrenador|equipo|horario)\b",
+               r"\bn[uú]mero\b", r"\bhorario\b", r"\bsesi[oó]n\b"):
+        m = re.search(mk, rest, re.I)
+        if m and m.start() > 0:
+            rest = rest[:m.start()]
+    return rest.strip(" .:,-\"")
+
+
 def _llm_prompt(instruction: str, doc) -> str:
     fases = ", ".join(str(b.get("fase", "")) for b in (doc.rich_blocks or ()))
     return (
@@ -226,6 +281,10 @@ def _llm_prompt(instruction: str, doc) -> str:
         '  {"accion":"add_block","tema":"tema del nuevo ejercicio (opcional)"}  (agregar un ejercicio/bloque nuevo)\n'
         '  {"accion":"draw_diagram","fase":"...","descripcion":"lo que describe el entrenador"}  (dibujar/rehacer el diagrama de un bloque)\n'
         '  {"accion":"set_objective","texto":"..."}\n'
+        '  {"accion":"set_session_number","valor":"2"}\n'
+        '  {"accion":"set_coach","texto":"nombre del entrenador"}\n'
+        '  {"accion":"set_team","texto":"nombre del equipo"}\n'
+        '  {"accion":"set_schedule","texto":"18:00 a 20:00"}\n'
         '  {"accion":"intensify"}  |  {"accion":"soften"}\n'
         '  {"accion":"chat","respuesta":"texto amable"}  (si no es una orden de edición)\n'
         f'Instrucción: "{instruction}"\nJSON:'

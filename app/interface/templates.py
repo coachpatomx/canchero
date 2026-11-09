@@ -101,6 +101,48 @@ _CSS = """
 """
 
 
+_LOADING_OVERLAY = """
+<div id="canchero-loading" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:rgba(10,13,18,.82);backdrop-filter:blur(2px);
+     flex-direction:column;align-items:center;justify-content:center;gap:18px">
+  <div style="width:84px;height:110px;animation:spin 1.1s linear infinite">
+    <svg xmlns="http://www.w3.org/2000/svg" width="84" height="110" viewBox="0 0 200 270" fill="none" aria-label="Canchero">
+      <path d="M70 58 Q70 14 100 14 Q130 14 130 58" fill="none" stroke="#ff7a1a" stroke-width="12" stroke-linecap="round"/>
+      <rect x="62" y="56" width="76" height="150" rx="16" fill="#22c55e"/>
+      <circle cx="84" cy="104" r="9" fill="#fff"/><circle cx="116" cy="104" r="9" fill="#fff"/>
+      <circle cx="86" cy="106" r="4" fill="#0e1116"/><circle cx="114" cy="102" r="4" fill="#0e1116"/>
+      <rect x="74" y="206" width="12" height="46" rx="6" fill="#1a2a52"/>
+      <rect x="114" y="206" width="12" height="46" rx="6" fill="#1a2a52"/>
+    </svg>
+  </div>
+  <div style="color:#eafbe9;font-weight:800;font-size:20px;font-family:var(--font)">Chambeando…</div>
+  <div style="color:#9fb0c0;font-size:13px">El agente está armando tu sesión. Dame unos segundos.</div>
+</div>
+<style>@keyframes spin{{to{{transform:rotate(360deg)}}}}</style>
+<script>
+(function(){{
+  function showLoading(){{
+    var o=document.getElementById('canchero-loading');
+    if(o) o.style.display='flex';
+  }}
+  document.addEventListener('submit', function(e){{
+    // Mostrar el overlay al enviar cualquier formulario de generar/crear.
+    var f=e.target;
+    if(f && f.getAttribute('action') &&
+       /\\/(create|session|plan|express|answer|chat\\/apply)/.test(f.getAttribute('action'))){{
+      showLoading();
+    }}
+  }}, true);
+  // También en clics de enlaces/botones con data-loading.
+  document.addEventListener('click', function(e){{
+    var el=e.target.closest('[data-loading]');
+    if(el) showLoading();
+  }}, true);
+}})();
+</script>
+"""
+
+
 def _page(title: str, lang: str, body: str, subtitle: str = "") -> str:
     sub = f'<span class="muted" style="color:#d7ead9">{subtitle}</span>' if subtitle else ""
     return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="utf-8">
@@ -108,7 +150,7 @@ def _page(title: str, lang: str, body: str, subtitle: str = "") -> str:
 <link rel="icon" type="image/svg+xml" href="/static/canchero.svg">
 <title>{title}</title>{_CSS}</head><body>
 <header>{_LOGO_SVG}<div><h1>Canchero</h1>{sub}</div></header>
-<div class="wrap">{body}</div></body></html>"""
+<div class="wrap">{body}</div>{_LOADING_OVERLAY}</body></html>"""
 
 
 _CATEGORIES = ["", "Sub-13", "Sub-15", "Sub-17", "Sub-19", "Sub-23", "Libre", "Primer equipo"]
