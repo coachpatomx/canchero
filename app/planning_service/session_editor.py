@@ -270,8 +270,11 @@ def _clean_tail(text: str, keyword: str) -> str:
 def _llm_prompt(instruction: str, doc) -> str:
     fases = ", ".join(str(b.get("fase", "")) for b in (doc.rich_blocks or ()))
     return (
-        "Eres el asistente que edita UNA sesión de entrenamiento. Convierte la "
-        "instrucción en UNA acción JSON. Responde SOLO el JSON.\n"
+        "Eres el asistente que edita UNA sesión de entrenamiento. Convierte el "
+        "mensaje en una o VARIAS acciones JSON. Si el mensaje pide varias cosas "
+        '(p. ej. «número 2 y entrenador Juan»), devuélvelas TODAS en una lista: '
+        '{"acciones":[ {..}, {..} ]}. Si es una sola, puedes devolver el objeto '
+        "directo. Responde SOLO JSON.\n"
         f"La sesión tiene estos bloques (fases): {fases or 'sin bloques'}.\n"
         "Acciones válidas:\n"
         '  {"accion":"set_sheet_style","estilo":"dark|inclusivo"}\n'
@@ -304,27 +307,82 @@ def _parse(raw: str) -> dict | None:
         return None
 
 
-def edit_session_from_text(llm, doc, instruction: str) -> tuple[object, str]:
-    """Interpreta y aplica una instrucción sobre la sesión. (doc, mensaje_es)."""
-    enabled = bool(getattr(llm, "is_enabled", lambda: False)()) if llm else False
-    action = None
-    if enabled:
-        try:
-            res = llm.complete(_llm_prompt(instruction, doc))
-            action = _parse(getattr(res, "value", "") or "")
-        except Exception:
-            action = None
-    if not action or not action.get("accion"):
-        action = _rules_interpret(instruction) or {"accion": ""}
-    if not action.get("accion"):
-        return doc, _GENERIC
-    # add_block y draw_diagram necesitan el LLM: se manejan aquí.
-    if action.get("accion") == "add_block":
+def _parse_many(raw: str) -> list[dict]:
+    """Extrae una o varias acciones: {"acciones":[...]} | [...] | {...}."""
+    if not raw:
+        return []
+    t = raw.strip()
+    starts = [i for i in (t.find("{"), t.find("[")) if i != -1]
+    if starts:
+        s = min(starts)
+        e = max(t.rfind("}"), t.rfind("]"))
+        if e > s:
+            t = t[s:e + 1]
+    try:
+        data = json.loads(t)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if isinstance(data, dict):
+        if isinstance(data.get("acciones"), list):
+            return [a for a in data["acciones"] if isinstance(a, dict)]
+        return [data]
+    if isinstance(data, list):
+        return [a for a in data if isinstance(a, dict)]
+    return []
+
+
+# Separadores para partir varias instrucciones (modo reglas, sin LLM).
+_SESS_SPLIT = re.compile(
+    r'["\n;]+|,\s+(?=ponle|pon|agrega|a[ñn]ade|cambia|haz|dibuja|entrenador|'
+    r'equipo|horario|n[uú]mero|hazla|m[aá]s|menos)|\s+y\s+(?=ponle|pon|agrega|'
+    r'a[ñn]ade|cambia|haz|dibuja|entrenador|equipo|horario|n[uú]mero|hazla|m[aá]s|menos)',
+    re.I)
+
+
+def _apply_one(llm, doc, action, enabled):
+    """Aplica una sola acción; delega las que necesitan LLM."""
+    kind = action.get("accion", "")
+    if kind == "add_block":
         return _add_block(llm, doc, action.get("tema", ""), enabled)
-    if action.get("accion") == "draw_diagram":
+    if kind == "draw_diagram":
         return _draw_diagram(llm, doc, action.get("fase"),
                              action.get("descripcion", ""), enabled)
     return apply_session_action(doc, action)
+
+
+def edit_session_from_text(llm, doc, instruction: str) -> tuple[object, str]:
+    """Interpreta y aplica UNA o VARIAS instrucciones del mensaje. (doc, mensaje)."""
+    enabled = bool(getattr(llm, "is_enabled", lambda: False)()) if llm else False
+    actions: list[dict] = []
+    if enabled:
+        try:
+            res = llm.complete(_llm_prompt(instruction, doc))
+            actions = [a for a in _parse_many(getattr(res, "value", "") or "")
+                       if a.get("accion")]
+        except Exception:
+            actions = []
+    if not actions:
+        # Fallback por reglas: parte el mensaje si trae varias instrucciones.
+        chunks = [c.strip(" .,:-\"") for c in _SESS_SPLIT.split(instruction)
+                  if len(c.strip()) >= 3]
+        if len(chunks) > 1:
+            for ch in chunks:
+                a = _rules_interpret(ch)
+                if a:
+                    actions.append(a)
+        if not actions:
+            a = _rules_interpret(instruction)
+            if a:
+                actions = [a]
+    if not actions:
+        return doc, _GENERIC
+    messages = []
+    for action in actions:
+        doc, msg = _apply_one(llm, doc, action, enabled)
+        messages.append(msg)
+    if len(messages) == 1:
+        return doc, messages[0]
+    return doc, "Hice " + str(len(messages)) + " cambios:\n• " + "\n• ".join(messages)
 
 
 def _draw_diagram(llm, doc, fase, descripcion: str, enabled: bool) -> tuple[object, str]:
