@@ -447,8 +447,11 @@ _PERIOD_COLOR = {
 _CSS_MATRIX = """
 <style>
   .mtx-wrap { background:#fff; color:#111; padding:16px; overflow-x:auto;
-    font-family:'Segoe UI', Arial, sans-serif; position:relative; }
-  .mtx-wrap * { position:relative; z-index:1; }
+    font-family:'Segoe UI', Arial, sans-serif; position:relative;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .mtx-wrap *, table.mtx td, table.mtx th {
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .mtx-wrap > *:not(.mtx-bg) { position:relative; z-index:1; }
   .mtx-wrap::before { content:""; position:absolute; inset:0; z-index:0;
     background:url('/static/escudo-club.png') no-repeat center;
     background-size:min(55%, 520px); opacity:0.08; pointer-events:none; }
@@ -508,13 +511,20 @@ _MESO_OBJ_DEFAULT = {
 
 def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
                      team: str = "", coordinator: str = "", coach: str = "",
-                     period_label: str = "") -> str:
+                     period_label: str = "", start_date: str = "",
+                     competitions: list | None = None) -> str:
     """Matriz de periodización del macrociclo (planilla tipo Excel).
 
     Se adapta a cualquier nº de semanas / frecuencia de partidos (no asume un
     calendario fijo). Las celdas de volumen y capacidades se pintan según las
     cargas que calculó el motor por microciclo.
+
+    start_date: fecha ISO (YYYY-MM-DD) de la semana 1 -> muestra meses/fechas reales.
+    competitions: lista de dicts {"fecha": "YYYY-MM-DD", "rival": "...", "nombre": "..."}
+                  -> resalta de arriba a abajo la columna de la semana del partido.
     """
+    from app.planning_service import calendar_map as cal
+
     macro = plan.macro
     micros = sorted(
         [m for meso in macro.mesocycles for m in meso.microcycles],
@@ -525,6 +535,21 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
         return '<div class="mtx-wrap"><p>El plan no tiene microciclos.</p></div>'
 
     title = plan.title.es if lang == "es" else plan.title.en
+    competitions = competitions or []
+
+    # Mapear cada competencia a la semana del macro (si hay fecha de inicio).
+    comp_by_week: dict[int, list] = {}
+    for comp in competitions:
+        d = cal.parse_iso(comp.get("fecha", ""))
+        if d is None:
+            continue
+        wk = cal.week_of_date(start_date, d, n) if start_date else None
+        if wk:
+            comp_by_week.setdefault(wk, []).append(comp)
+
+    def _comp_cell_style(week: int) -> str:
+        """Si la semana tiene competencia, resalta la columna (rojo tenue)."""
+        return ' style="box-shadow:inset 0 0 0 2px #c62828"' if week in comp_by_week else ""
 
     # --- Fila de PERIODO (colspan por nº de semanas de cada periodo)
     def _weeks_in(p):
@@ -550,18 +575,66 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
         mt = _MESOTYPE_ES.get(meso.type.value, meso.type.value)
         meso_cells.append(f'<td colspan="{span}" class="mtx-sub">Meso {i} · {mt}</td>')
 
-    # --- Filas de microciclo / semana / partidos
-    micro_hdr = "".join(f'<td class="mtx-sub">M{m.week_index}</td>' for m in micros)
+    # --- Fila de MES (agrupada por meses consecutivos) si hay fecha de inicio
+    month_row = ""
+    if start_date:
+        month_cells = []
+        i = 0
+        while i < n:
+            mon = cal.month_label(start_date, micros[i].week_index)
+            j = i
+            while j + 1 < n and cal.month_label(start_date, micros[j + 1].week_index) == mon:
+                j += 1
+            span = j - i + 1
+            month_cells.append(f'<td colspan="{span}" class="mtx-sub">{mon}</td>')
+            i = j + 1
+        month_row = f'<tr><td class="mtx-rowlbl">MES</td>{"".join(month_cells)}</tr>'
+
+    # --- Filas de microciclo / fecha / semana / partidos
+    micro_hdr = "".join(
+        f'<td class="mtx-sub"{_comp_cell_style(m.week_index)}>M{m.week_index}</td>' for m in micros
+    )
     week_hdr = "".join(f'<td>{m.week_index}</td>' for m in micros)
+    date_row = ""
+    if start_date:
+        date_cells = "".join(
+            f'<td style="font-size:9px">{cal.week_label(start_date, m.week_index)}</td>'
+            for m in micros
+        )
+        date_row = f'<tr><td class="mtx-rowlbl">FECHA</td>{date_cells}</tr>'
     match_hdr = "".join(
         f'<td>{"●"*m.matches_this_week if m.matches_this_week else "-"}</td>' for m in micros
     )
 
+    # --- Fila de COMPETENCIA: cruza (resalta) la columna de la semana del partido
+    comp_row = ""
+    if comp_by_week:
+        comp_cells = []
+        for m in micros:
+            comps = comp_by_week.get(m.week_index)
+            if comps:
+                label = " / ".join(
+                    (c.get("rival") or c.get("nombre") or "Partido") for c in comps
+                )
+                comp_cells.append(
+                    f'<td style="background:#c62828;color:#fff;font-weight:700;font-size:9px">'
+                    f'⚽ {_esc(label)}</td>'
+                )
+            else:
+                comp_cells.append('<td>&nbsp;</td>')
+        comp_row = f'<tr><td class="mtx-rowlbl">COMPETENCIA</td>{"".join(comp_cells)}</tr>'
+
     rows = []
     rows.append(f'<tr class="mtx-head"><td class="mtx-rowlbl">PERIODO</td>{"".join(period_cells)}</tr>')
     rows.append(f'<tr><td class="mtx-rowlbl">MESOCICLO</td>{"".join(meso_cells)}</tr>')
+    if month_row:
+        rows.append(month_row)
     rows.append(f'<tr><td class="mtx-rowlbl">MICROCICLO</td>{micro_hdr}</tr>')
+    if date_row:
+        rows.append(date_row)
     rows.append(f'<tr><td class="mtx-rowlbl">Semana</td>{week_hdr}</tr>')
+    if comp_row:
+        rows.append(comp_row)
     rows.append(f'<tr><td class="mtx-rowlbl">Partidos</td>{match_hdr}</tr>')
 
     # --- Rejilla de VOLUMEN (100% -> 50%); normalizada al rango real del motor

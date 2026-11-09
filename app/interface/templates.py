@@ -560,16 +560,15 @@ def render_plan_studio(plan, lang: str = "es", chat_history=None,
             '• «cambia el objetivo del mesociclo 3 a presión alta»</div>'
         )
 
-    # Query string para conservar los metadatos del encabezado al re-render.
+    # La vista previa lee los metadatos (equipo, fechas, competencias) del repo,
+    # así que basta con la URL base; se actualiza sola en cada cambio.
     import urllib.parse
-    qs = urllib.parse.urlencode({k: v for k, v in meta.items() if v})
-    sep = "&" if qs else ""
-    preview_url = f"/plan/{pid}/matrix" + (f"?{qs}" if qs else "")
+    preview_url = f"/plan/{pid}/matrix"
 
     chips = (
         '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">'
         + "".join(
-            f'<a href="/plan/{pid}/chat/apply?{qs}{sep}instruction={urllib.parse.quote(c)}" '
+            f'<a href="/plan/{pid}/chat/apply?instruction={urllib.parse.quote(c)}" '
             f'style="background:#1b2330;color:#9fb0c0;border:1px solid #2a3647;'
             f'border-radius:999px;padding:5px 11px;font-size:12px;text-decoration:none">{c}</a>'
             for c in ("sube el volumen de la semana 3",
@@ -593,9 +592,24 @@ def render_plan_studio(plan, lang: str = "es", chat_history=None,
         {"".join(bubbles)}
       </div>
       <div style="padding:12px 14px;border-top:1px solid var(--line)">
+        <details style="margin-bottom:10px">
+          <summary style="cursor:pointer;color:var(--muted);font-size:12px">
+            ⚙️ Datos del plan (equipo, fecha de inicio, competencias)</summary>
+          <form method="get" action="/plan/{pid}/chat/apply"
+                style="display:flex;flex-direction:column;gap:6px;margin:8px 0 0">
+            <input name="instruction" placeholder="Ej. ponle el nombre del equipo: Club América"
+                   style="margin:0">
+            <button type="submit" style="margin:0;align-self:flex-start;padding:7px 14px">Aplicar</button>
+          </form>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            <a href="/plan/{pid}/chat/apply?instruction={_q('el macro inicia el 10 de agosto de 2026')}"
+               style="background:#1b2330;color:#9fb0c0;border:1px solid #2a3647;border-radius:999px;padding:5px 11px;font-size:12px;text-decoration:none">📅 fecha de inicio…</a>
+            <a href="/plan/{pid}/chat/apply?instruction={_q('tengo competencia el 20 de agosto vs Rival')}"
+               style="background:#1b2330;color:#9fb0c0;border:1px solid #2a3647;border-radius:999px;padding:5px 11px;font-size:12px;text-decoration:none">⚽ agregar competencia…</a>
+          </div>
+        </details>
         {chips}
         <form method="get" action="/plan/{pid}/chat/apply" style="display:flex;gap:8px;margin:0">
-          {"".join(f'<input type="hidden" name="{k}" value="{_esc_studio(str(v))}">' for k,v in meta.items() if v)}
           <input name="instruction" placeholder="Escribe tu ajuste…" autofocus
                  style="flex:1;margin:0" required>
           <button type="submit" style="margin:0">➤</button>
@@ -623,3 +637,8 @@ def render_plan_studio(plan, lang: str = "es", chat_history=None,
 def _esc_studio(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             .replace('"', "&quot;"))
+
+
+def _q(s: str) -> str:
+    import urllib.parse
+    return urllib.parse.quote(s)

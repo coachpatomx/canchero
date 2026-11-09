@@ -147,8 +147,16 @@ def create_app(service: PlanningService):
             plan = res.value
             _plans[plan_id] = plan
         from app.persistence import to_html_plan_matrix
-        html = to_html_plan_matrix(plan, lang, team=team, coordinator=coordinator,
-                                   coach=coach, period_label=period_label)
+        meta = service.repo.load_plan_meta(plan_id)
+        html = to_html_plan_matrix(
+            plan, lang,
+            team=team or meta.get("team", ""),
+            coordinator=coordinator or meta.get("coordinator", ""),
+            coach=coach or meta.get("coach", ""),
+            period_label=period_label or meta.get("period_label", ""),
+            start_date=meta.get("start_date", ""),
+            competitions=meta.get("competitions", []),
+        )
         return HTMLResponse(html)
 
     def _load_plan(plan_id):
@@ -186,16 +194,21 @@ def create_app(service: PlanningService):
             from dataclasses import replace as _replace
             from app.planning_service.plan_editor import edit_macro_from_text
             hist.append({"role": "user", "text": instruction})
-            new_macro, message = edit_macro_from_text(service.llm, plan.macro, instruction)
+            plan_meta = service.repo.load_plan_meta(plan_id)
+            new_macro, new_meta, message = edit_macro_from_text(
+                service.llm, plan.macro, instruction, plan_meta)
             # Reconstruir el plan con el macro mutado y persistir.
             plan = _replace(plan, macro=new_macro)
             _plans[plan_id] = plan
             try:
                 service.repo.save(plan)
+                service.repo.save_plan_meta(plan_id, new_meta)
             except Exception:
                 pass  # si falla el guardado, al menos la cache queda actualizada
             hist.append({"role": "assistant", "text": message})
-        return HTMLResponse(render_plan_studio(plan, lang, hist, meta))
+        # Recargar meta para que el estudio y la vista previa reflejen los cambios.
+        return HTMLResponse(render_plan_studio(plan, lang, hist,
+                                               service.repo.load_plan_meta(plan_id)))
 
     @app.get("/plan/{plan_id}", response_class=HTMLResponse)
     def view_plan(plan_id: str, lang: str = "es"):

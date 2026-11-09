@@ -95,9 +95,29 @@ class JsonFileRepository:
         path = os.path.join(self.plans_dir, f"{plan_id}.json")
         if os.path.exists(path):
             os.remove(path)
+        meta = os.path.join(self.plans_dir, f"{plan_id}.meta.json")
+        if os.path.exists(meta):
+            os.remove(meta)
         index = [r for r in self._read_index() if r["id"] != plan_id]
         self._write_index(index)
         return Ok(None)
+
+    # ---- metadatos del plan (equipo, fechas, competencias) ---- #
+    def save_plan_meta(self, plan_id: str, meta: dict) -> None:
+        """Guarda metadatos editables del plan (no tocan el macro del motor):
+        equipo, entrenador, coordinador, fecha de inicio ISO, competencias."""
+        path = os.path.join(self.plans_dir, f"{plan_id}.meta.json")
+        _atomic_write(path, meta)
+
+    def load_plan_meta(self, plan_id: str) -> dict:
+        path = os.path.join(self.plans_dir, f"{plan_id}.meta.json")
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
 
     # ---- biblioteca ---- #
     def save_exercise(self, ex: Exercise) -> str:

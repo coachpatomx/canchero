@@ -43,6 +43,19 @@ def _clamp(v, lo, hi):
     return max(lo, min(hi, int(round(v))))
 
 
+def _clean_name(original_text: str, keyword: str) -> str:
+    """Extrae el nombre después de la palabra clave, conservando mayúsculas
+    del texto original (ej. 'ponle el nombre del equipo: CLUB AMÉRICA' -> 'CLUB AMÉRICA')."""
+    low = original_text.lower()
+    idx = low.find(keyword)
+    if idx == -1:
+        return original_text.strip()
+    rest = original_text[idx + len(keyword):]
+    # quitar conectores iniciales (: , es, será, a, =)
+    rest = re.sub(r"^\s*(?:\(a\))?\s*(?::|=|,|-|es|será|sera|a)?\s*", "", rest, flags=re.I)
+    return rest.strip(" .:-")
+
+
 # --------------------------------------------------------------------------- #
 # Mutación segura del macro
 # --------------------------------------------------------------------------- #
@@ -169,6 +182,36 @@ def apply_action(macro: Macrocycle, action: dict) -> tuple[Macrocycle, str]:
 def _rules_interpret(text: str) -> dict | None:
     """Fallback offline por reglas. Devuelve una acción o None si no entiende."""
     t = text.lower().strip()
+
+    # ---- metadatos: nombre de equipo / entrenador / coordinador ----
+    m = re.search(r"(?:nombre del |nombre de |)equipo\s*(?:a|:|=|es|será|sera)?\s*(.+)", t)
+    if "equipo" in t and m and m.group(1).strip():
+        return {"accion": "set_team", "texto": _clean_name(text, "equipo")}
+    m = re.search(r"entrenador(?:\(a\))?\s*(?:a|:|=|es|será|sera)?\s*(.+)", t)
+    if "entrenador" in t and m and m.group(1).strip():
+        return {"accion": "set_coach", "texto": _clean_name(text, "entrenador")}
+    if "coordinador" in t:
+        return {"accion": "set_coordinator", "texto": _clean_name(text, "coordinador")}
+
+    # ---- fecha de inicio del macro ----
+    if any(w in t for w in ("inicia", "empieza", "arranca", "fecha de inicio", "comienza")):
+        from app.planning_service.calendar_map import parse_spanish_date
+        d = parse_spanish_date(text)
+        if d:
+            return {"accion": "set_start_date", "fecha": d.isoformat()}
+
+    # ---- competencia / partido ----
+    if any(w in t for w in ("competencia", "competición", "competicion", "partido",
+                            "juego el", "jugamos", "enfrentamos", "vs ", " vs")):
+        from app.planning_service.calendar_map import parse_spanish_date
+        d = parse_spanish_date(text)
+        rival = ""
+        mr = re.search(r"(?:vs\.?|contra|frente a)\s+(.+?)(?:\s+el\b|$)", t)
+        if mr:
+            rival = mr.group(1).strip()
+        if d:
+            return {"accion": "add_competition", "fecha": d.isoformat(), "rival": rival}
+
     week = None
     meso = None
     mw = re.search(r"semana\s+(\d+)", t)
@@ -231,6 +274,12 @@ def _llm_prompt(instruction: str, macro: Macrocycle) -> str:
         '  {"accion":"set_micro_type","semana":N,"tipo":"recovery|shock|competition|introductory|developmental|precompetitive"}\n'
         '  {"accion":"set_volume"|"adjust_volume"|...,"meso":N,...}  (aplica a todo el mesociclo)\n'
         '  {"accion":"set_objective","meso":N,"texto":"..."}\n'
+        '  {"accion":"set_team","texto":"nombre del equipo"}\n'
+        '  {"accion":"set_coach","texto":"nombre del entrenador"}\n'
+        '  {"accion":"set_coordinator","texto":"nombre del coordinador"}\n'
+        '  {"accion":"set_start_date","fecha":"YYYY-MM-DD"}  (fecha de inicio del macro)\n'
+        '  {"accion":"add_competition","fecha":"YYYY-MM-DD","rival":"rival (opcional)"}\n'
+        "Interpreta fechas en español (ej. '20 de agosto de 2026' -> 2026-08-20).\n"
         "Si no puedes mapearla, responde {\"accion\":\"\"}.\n"
         f'Instrucción del entrenador: "{instruction}"\n'
         "JSON:"
@@ -271,11 +320,65 @@ def interpret_instruction(llm, instruction: str, macro: Macrocycle) -> dict:
     return action or {"accion": ""}
 
 
-def edit_macro_from_text(llm, macro: Macrocycle, instruction: str) -> tuple[Macrocycle, str]:
-    """Interpreta y aplica una instrucción. Devuelve (macro_nuevo, mensaje_es)."""
+_META_ACTIONS = {"set_team", "set_coach", "set_coordinator", "set_start_date",
+                 "add_competition"}
+
+
+def _apply_meta_action(meta: dict, action: dict) -> tuple[dict, str]:
+    """Aplica una acción de metadatos sobre una copia de `meta`. (meta, mensaje)."""
+    kind = action["accion"]
+    meta = dict(meta)
+    if kind == "set_team":
+        meta["team"] = action.get("texto", "").strip()
+        return meta, f"Listo: nombre del equipo → «{meta['team']}»."
+    if kind == "set_coach":
+        meta["coach"] = action.get("texto", "").strip()
+        return meta, f"Listo: entrenador → «{meta['coach']}»."
+    if kind == "set_coordinator":
+        meta["coordinator"] = action.get("texto", "").strip()
+        return meta, f"Listo: coordinador → «{meta['coordinator']}»."
+    if kind == "set_start_date":
+        meta["start_date"] = action.get("fecha", "")
+        from app.planning_service.calendar_map import parse_iso
+        d = parse_iso(meta["start_date"])
+        pretty = d.strftime("%d/%m/%Y") if d else meta["start_date"]
+        return meta, (f"Listo: el macrociclo inicia el {pretty}. "
+                      "Ahora la matriz muestra meses y fechas reales.")
+    if kind == "add_competition":
+        comps = list(meta.get("competitions", []))
+        comp = {"fecha": action.get("fecha", ""), "rival": action.get("rival", "")}
+        comps.append(comp)
+        meta["competitions"] = comps
+        from app.planning_service.calendar_map import parse_iso
+        d = parse_iso(comp["fecha"])
+        pretty = d.strftime("%d/%m/%Y") if d else comp["fecha"]
+        extra = f" vs {comp['rival']}" if comp["rival"] else ""
+        hint = "" if meta.get("start_date") else (
+            " Nota: dime primero la fecha de inicio del macro para ubicarla en la matriz "
+            "(ej. «el macro inicia el 10 de agosto de 2026»).")
+        return meta, f"Listo: competencia registrada el {pretty}{extra}.{hint}"
+    return meta, "Acción de metadatos no reconocida."
+
+
+def edit_macro_from_text(llm, macro: Macrocycle, instruction: str,
+                         meta: dict | None = None) -> tuple[Macrocycle, dict, str]:
+    """Interpreta y aplica una instrucción.
+
+    Devuelve (macro_nuevo, meta_nuevo, mensaje_es). El macro solo cambia para
+    acciones de carga/objetivo; los metadatos (equipo, fechas, competencias)
+    cambian para acciones de metadatos.
+    """
+    meta = dict(meta or {})
     action = interpret_instruction(llm, instruction, macro)
-    if not action.get("accion"):
-        return macro, ("No pude interpretar la instrucción. Prueba con algo como: "
-                       "«sube el volumen de la semana 5», «pon la intensidad del mesociclo 2 en 80», "
-                       "«marca la semana 8 como descarga».")
-    return apply_action(macro, action)
+    kind = action.get("accion", "")
+    if not kind:
+        return macro, meta, (
+            "No pude interpretar la instrucción. Prueba con algo como: "
+            "«ponle el nombre del equipo: Club América», «el macro inicia el 10 de agosto de 2026», "
+            "«tengo competencia el 20 de agosto vs Cruz Azul», «sube el volumen de la semana 5», "
+            "«marca la semana 8 como descarga».")
+    if kind in _META_ACTIONS:
+        new_meta, msg = _apply_meta_action(meta, action)
+        return macro, new_meta, msg
+    new_macro, msg = apply_action(macro, action)
+    return new_macro, meta, msg
