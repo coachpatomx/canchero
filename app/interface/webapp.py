@@ -68,6 +68,47 @@ def create_app(service: PlanningService):
         return FileResponse(os.path.join(_STATIC, "canchero.svg"),
                             media_type="image/svg+xml")
 
+    @app.get("/diag", response_class=HTMLResponse)
+    def diag(lang: str = "es"):
+        """Autodiagnóstico del LLM: dice si OpenAI está activo y si una llamada
+        real funciona (o el motivo exacto por el que falla)."""
+        import os as _os
+        llm = service.llm
+        enabled = bool(getattr(llm, "is_enabled", lambda: False)())
+        rows = [f"<li><b>Conector:</b> {type(llm).__name__}</li>",
+                f"<li><b>is_enabled():</b> {'sí' if enabled else 'no'}</li>"]
+        # Variables de entorno relevantes (sin exponer la clave).
+        prov = _os.environ.get("AGENTE_LLM_PROVIDER", "(no definida)")
+        model = _os.environ.get("AGENTE_LLM_MODEL", "(no definida)")
+        keyvar = _os.environ.get("AGENTE_LLM_API_KEY_VAR", "(no definida)")
+        key_present = bool(_os.environ.get(keyvar)) if keyvar not in ("(no definida)", "") else False
+        rows.append(f"<li><b>AGENTE_LLM_PROVIDER:</b> {prov}</li>")
+        rows.append(f"<li><b>AGENTE_LLM_MODEL:</b> {model}</li>")
+        rows.append(f"<li><b>AGENTE_LLM_API_KEY_VAR:</b> {keyvar}</li>")
+        rows.append(f"<li><b>¿Clave presente en esa variable?:</b> {'sí' if key_present else 'NO'}</li>")
+        # Prueba real de llamada.
+        prueba = "—"
+        try:
+            res = llm.complete("Responde solo: OK")
+            from periodization_engine.errors import Err as _Err
+            if isinstance(res, _Err):
+                prueba = f"❌ FALLÓ: {res.error.detail}"
+            else:
+                prueba = f"✓ Respondió: {(res.value or '').strip()[:60]}"
+        except Exception as e:
+            prueba = f"❌ EXCEPCIÓN: {type(e).__name__}: {e}"
+        rows.append(f"<li><b>Prueba de llamada real:</b> {_esc_html(str(prueba))}</li>")
+        veredicto = ("✅ OpenAI está funcionando." if prueba.startswith("✓")
+                     else "⚠️ El chat está cayendo a modo reglas. Revisa lo de arriba.")
+        body = (f'<div class="card"><h2>🔎 Diagnóstico del agente (LLM)</h2>'
+                f'<p><b>{veredicto}</b></p><ul class="list">{"".join(rows)}</ul>'
+                f'<p class="muted">Tip: si la clave no está presente o la prueba falla, '
+                f'revisa tu archivo .env (AGENTE_LLM_PROVIDER=openai, AGENTE_LLM_API_KEY_VAR=OPENAI_API_KEY, '
+                f'y OPENAI_API_KEY=sk-... sin comentarios).</p>'
+                f'<p><a class="back" href="/">← Inicio</a></p></div>')
+        from .templates import _page as _pg
+        return HTMLResponse(_pg("Diagnóstico", lang, body, "¿OpenAI está conectado?"))
+
     @app.get("/", response_class=HTMLResponse)
     def home():
         history = service.repo.list_history()
