@@ -28,6 +28,7 @@ from .templates import (
     render_plan_studio,
     render_roster,
     render_session,
+    render_session_interview,
     render_session_studio,
     render_sessions_history,
 )
@@ -357,6 +358,68 @@ def create_app(service: PlanningService):
             return default
 
     from fastapi import Query
+
+    # ---- Entrevista conversacional para crear una SESIÓN ---- #
+    def _plans_for_picker():
+        rows = []
+        for ref in service.repo.list_history():
+            rows.append({"id": ref.id, "title": ref.title_es})
+        return rows
+
+    def _resolve_sheet_style(style, format_id):
+        if style and style != "auto":
+            return style
+        adaptados = {"blind_5", "cp_7", "down", "amputee"}
+        return "inclusivo" if format_id in adaptados else "dark"
+
+    @app.get("/session/new", response_class=HTMLResponse)
+    def session_new(lang: str = "es"):
+        from app.planning_service import session_interview as si
+        answers: dict = {}
+        q = si.next_question(answers, _plans_for_picker())
+        return HTMLResponse(render_session_interview(answers, q, _plans_for_picker(), lang))
+
+    @app.get("/session/new/answer", response_class=HTMLResponse)
+    def session_new_answer(step: str = "", value: str = "", answers: str = "", lang: str = "es"):
+        from app.planning_service import session_interview as si
+        a = _decode_answers(answers)
+        if step:
+            a[step] = value
+        plans = _plans_for_picker()
+        q = si.next_question(a, plans)
+        return HTMLResponse(render_session_interview(a, q, plans, lang))
+
+    @app.get("/session/new/create", response_class=HTMLResponse)
+    def session_new_create(answers: str = "", lang: str = "es"):
+        from app.planning_service import session_interview as si
+        a = _decode_answers(answers)
+        plans = _plans_for_picker()
+        if not si.is_complete(a, plans):
+            q = si.next_question(a, plans)
+            return HTMLResponse(render_session_interview(a, q, plans, lang))
+        # Formato: hereda del plan elegido, o del plan activo, o football_11.
+        plan_id = "" if a.get("plan") in ("__none__", "", None) else a.get("plan")
+        fmt = "football_11"
+        src_plan = plan_id or _state.get("active_plan_id", "")
+        if src_plan:
+            loaded = service.repo.load(src_plan)
+            if not isinstance(loaded, Err):
+                fmt = loaded.value.format_id or fmt
+        kw = si.to_session_kwargs(a, default_format=fmt)
+        req = kw["request"]
+        req["format_id"] = fmt
+        style = _resolve_sheet_style(kw.get("sheet_style", "auto"), fmt)
+        sheet_meta = dict(sheet_style=style, team_name="", coach_name="",
+                          schedule="", session_number="", format_id=fmt)
+        # Reusar el mismo flujo que el formulario clásico.
+        resp = _do_create_session(req, plan_id, lang, sheet_meta)
+        # _do_create_session renderiza la sesión; para llevar al estudio de sesión
+        # buscamos el último sid creado.
+        if _session_order:
+            sid = _session_order[-1]
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=f"/session/{sid}/chat", status_code=303)
+        return resp
 
     @app.get("/session", response_class=HTMLResponse)
     def create_session_get(

@@ -186,6 +186,8 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
 
 <div class="card">
   <h2>💬 Nueva sesión</h2>
+  <p><a class="btn" href="/session/new">💬 Crear hablando con el agente (guiado)</a></p>
+  <p class="muted">O usa el formulario clásico de abajo.</p>
   <p class="muted">Describe la sesión en lenguaje natural y afina con las opciones.
   Entre más contexto des (fundamento, material, categoría), mejor queda. Si hay un
   plan activo, la sesión se alinea a su microciclo de la semana.</p>
@@ -873,3 +875,98 @@ def render_session_studio(doc, sid: str, lang: str = "es", chat_history=None,
    <a class="back" href="/">Inicio</a></p>
 """
     return _page(f"Estudio de sesión", lang, body, "Edita conversando con el agente")
+
+
+# --------------------------------------------------------------------------- #
+# Entrevista conversacional para CREAR una SESIÓN (estilo AI-DLC).
+# Reutiliza _interview_question_html; las respuestas viajan como JSON en la URL.
+# --------------------------------------------------------------------------- #
+def render_session_interview(answers: dict, question: dict | None,
+                             plans: list | None = None, lang: str = "es") -> str:
+    import json
+    import urllib.parse
+    from app.planning_service import session_interview as si
+
+    answers = answers or {}
+    raw_json = json.dumps(answers, ensure_ascii=False)
+    enc = urllib.parse.quote(raw_json)
+    attr_json = _esc_studio(raw_json)
+
+    bubbles = [
+        '<div class="ib-bot">Vamos a armar una sesión. Te hago unas preguntas y '
+        'al final la genero (y luego la puedes ajustar hablando).</div>'
+    ]
+    labels = {"plan": "Plan", "week": "Semana", "text": "Tema",
+              "technical": "Técnico", "tactical": "Táctico", "physical": "Físico",
+              "duration": "Duración", "sheet_style": "Hoja"}
+    for k in si.STEPS:
+        if k in answers and str(answers[k]) not in ("", "__skip__", "__none__"):
+            bubbles.append(
+                f'<div class="ib-me">{_esc_studio(labels.get(k,k))}: '
+                f'{_esc_studio(str(answers[k]))}</div>')
+
+    if question is None:
+        panel = (
+            '<div class="ib-bot"><b>¡Listo!</b> ' + _esc_studio(si.summary(answers)) + '</div>'
+            f'<form method="get" action="/session/new/create" style="margin-top:10px">'
+            f'<input type="hidden" name="answers" value="{attr_json}">'
+            f'<button type="submit" style="margin:0">⚡ Generar sesión</button></form>'
+        )
+    else:
+        panel = _interview_question_html_sess(question, enc, attr_json)
+
+    body = f"""
+<style>
+  .ib-wrap {{ max-width:720px; margin:0 auto; }}
+  .ib-chat {{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+              padding:16px; display:flex; flex-direction:column; min-height:440px; }}
+  .ib-bot {{ align-self:flex-start; background:#1b2330; color:var(--ink); padding:10px 14px;
+             border-radius:14px 14px 14px 2px; max-width:86%; margin:5px 0; font-size:14px; line-height:1.5; }}
+  .ib-me {{ align-self:flex-end; background:var(--green); color:#06220f; padding:8px 13px;
+            border-radius:14px 14px 2px 14px; max-width:86%; margin:4px 0; font-size:13px; }}
+  .ib-opts {{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }}
+  .ib-opt {{ background:#0e1116; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+             text-decoration:none; color:var(--ink); font-size:13px; }}
+  .ib-opt:hover {{ border-color:var(--green); }}
+  .ib-rec {{ background:#13261a; border:1px solid #1f5133; color:#8fe0a8; border-radius:10px;
+             padding:8px 11px; font-size:12px; margin-top:8px; }}
+  .ib-star {{ color:#f9c80e; font-weight:700; }}
+</style>
+<div class="ib-wrap">
+  <h2 style="font-weight:800">📋 Nueva sesión</h2>
+  <div class="ib-chat">
+    {"".join(bubbles)}
+    {panel}
+  </div>
+  <p><a class="back" href="/">← Inicio</a></p>
+</div>
+"""
+    return _page("Nueva sesión", lang, body, "Te guío para armarla")
+
+
+def _interview_question_html_sess(q: dict, enc_answers: str, attr_answers: str) -> str:
+    """Igual que el del macro pero apuntando a /session/new/answer."""
+    import urllib.parse
+    out = [f'<div class="ib-bot">{_esc_studio(q["texto"])}</div>']
+    tipo = q.get("tipo")
+    base = f'/session/new/answer?step={q["id"]}&answers={enc_answers}&value='
+    if tipo in ("choice", "choice-rich"):
+        out.append('<div class="ib-opts">')
+        for opt in q.get("opciones", []):
+            url = base + urllib.parse.quote(str(opt["value"]))
+            star = ' <span class="ib-star">★</span>' if opt.get("recomendado") else ""
+            out.append(f'<a class="ib-opt" href="{url}">{_esc_studio(opt["label"])}{star}</a>')
+        out.append("</div>")
+    else:
+        itype = {"number": "number", "date": "date"}.get(tipo, "text")
+        out.append(
+            f'<form method="get" action="/session/new/answer" style="display:flex;gap:8px;margin-top:8px">'
+            f'<input type="hidden" name="step" value="{q["id"]}">'
+            f'<input type="hidden" name="answers" value="{attr_answers}">'
+            f'<input name="value" type="{itype}" placeholder="{_esc_studio(q.get("placeholder",""))}" '
+            f'style="flex:1;margin:0" autofocus required>'
+            f'<button type="submit" style="margin:0">➤</button></form>'
+        )
+    if q.get("recomendacion"):
+        out.append(f'<div class="ib-rec">💡 {_esc_studio(q["recomendacion"])}</div>')
+    return "".join(out)
