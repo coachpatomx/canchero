@@ -45,15 +45,30 @@ def _clamp(v, lo, hi):
 
 def _clean_name(original_text: str, keyword: str) -> str:
     """Extrae el nombre después de la palabra clave, conservando mayúsculas
-    del texto original (ej. 'ponle el nombre del equipo: CLUB AMÉRICA' -> 'CLUB AMÉRICA')."""
+    del texto original (ej. 'ponle el nombre del equipo: CLUB AMÉRICA' -> 'CLUB AMÉRICA').
+
+    Corta si aparece otra instrucción pegada (el macro inicia..., tengo competencia...)
+    para no tragarse frases ajenas."""
     low = original_text.lower()
     idx = low.find(keyword)
     if idx == -1:
         return original_text.strip()
     rest = original_text[idx + len(keyword):]
-    # quitar conectores iniciales (: , es, será, a, =)
     rest = re.sub(r"^\s*(?:\(a\))?\s*(?::|=|,|-|es|será|sera|a)?\s*", "", rest, flags=re.I)
-    return rest.strip(" .:-")
+    # Cortar antes de cualquier marcador de OTRA acción pegada en la misma frase.
+    cut_markers = [
+        r'\bel macro\b', r'\binicia\b', r'\bempieza\b', r'\barranca\b', r'\bcomienza\b',
+        r'\btengo\b', r'\bcompetencia\b', r'\bcompetici[oó]n\b', r'\bpartido\b',
+        r'\bjuego el\b', r'\bjugamos\b', r'\bsube\b', r'\bbaja\b', r'\bmarca\b',
+        r'\bpon(?:le)?\b', r'\bentrenador\b', r'\bcoordinador\b', r'"',
+    ]
+    low_rest = rest.lower()
+    cut = len(rest)
+    for mk in cut_markers:
+        m = re.search(mk, low_rest)
+        if m and 0 < m.start() < cut:
+            cut = m.start()
+    return rest[:cut].strip(" .:-\"")
 
 
 # --------------------------------------------------------------------------- #
@@ -280,8 +295,10 @@ def _llm_prompt(instruction: str, macro: Macrocycle) -> str:
         '  {"accion":"set_start_date","fecha":"YYYY-MM-DD"}  (fecha de inicio del macro)\n'
         '  {"accion":"add_competition","fecha":"YYYY-MM-DD","rival":"rival (opcional)"}\n'
         "Interpreta fechas en español (ej. '20 de agosto de 2026' -> 2026-08-20).\n"
-        "Si no puedes mapearla, responde {\"accion\":\"\"}.\n"
-        f'Instrucción del entrenador: "{instruction}"\n'
+        "Si el mensaje contiene VARIAS instrucciones, devuélvelas TODAS en una "
+        'lista: {"acciones":[ {..}, {..} ]}. Si es una sola, puedes devolver el '
+        "objeto directo. Si no puedes mapear nada, responde {\"accion\":\"\"}.\n"
+        f'Mensaje del entrenador: "{instruction}"\n'
         "JSON:"
     )
 
@@ -299,25 +316,81 @@ def _parse_action_json(raw: str) -> dict | None:
         return None
 
 
-def interpret_instruction(llm, instruction: str, macro: Macrocycle) -> dict:
-    """Devuelve una acción (dict). Usa LLM si está activo; si no, reglas.
+def _parse_actions_json(raw: str) -> list[dict]:
+    """Extrae una o varias acciones del JSON del LLM. Acepta:
+       {"acciones":[...]}  |  [...]  |  {...}"""
+    if not raw:
+        return []
+    text = raw.strip()
+    # recortar al primer bloque { } o [ ]
+    starts = [i for i in (text.find("{"), text.find("[")) if i != -1]
+    if starts:
+        start = min(starts)
+        end = max(text.rfind("}"), text.rfind("]"))
+        if end > start:
+            text = text[start:end + 1]
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if isinstance(data, dict):
+        if isinstance(data.get("acciones"), list):
+            return [a for a in data["acciones"] if isinstance(a, dict)]
+        return [data]
+    if isinstance(data, list):
+        return [a for a in data if isinstance(a, dict)]
+    return []
 
-    Siempre devuelve un dict (puede ser {"accion": ""} si nadie entendió)."""
-    # 1) Reglas primero si el LLM no está disponible.
+
+# Separadores para partir varias instrucciones dentro de un mismo mensaje
+# (modo reglas, sin LLM). Comillas, saltos de línea, punto y coma, " y ", " luego ".
+_SPLIT_RE = re.compile(
+    r'["\n;]+|,\s+(?=sube|baja|marca|pon|ponle|aumenta|reduce|cambia|fija|el macro|'
+    r'tengo|competencia|entrenador|coordinador)|\s+y\s+(?=sube|baja|marca|pon|ponle|'
+    r'aumenta|reduce|cambia|fija|el macro|tengo|competencia)|\s+luego\s+|'
+    r'\s+despu[eé]s\s+|\s+además\s+|\s+tambi[eé]n\s+', re.I)
+
+
+def _split_instructions(text: str) -> list[str]:
+    parts = [p.strip(" .,:-\"") for p in _SPLIT_RE.split(text)]
+    return [p for p in parts if len(p) >= 3]
+
+
+def interpret_many(llm, instruction: str, macro: Macrocycle) -> list[dict]:
+    """Devuelve una LISTA de acciones (puede traer varias si el mensaje las tiene).
+
+    Usa LLM si está activo (puede devolver varias acciones de una); si no, parte
+    el texto por separadores y aplica reglas a cada trozo."""
     enabled = bool(getattr(llm, "is_enabled", lambda: False)()) if llm else False
     if enabled:
         try:
             res = llm.complete(_llm_prompt(instruction, macro))
             raw = getattr(res, "value", None)
-            if raw:
-                action = _parse_action_json(raw)
-                if action and action.get("accion"):
-                    return action
+            actions = [a for a in _parse_actions_json(raw or "") if a.get("accion")]
+            if actions:
+                return actions
         except Exception:
             pass  # degradación a reglas
-    # 2) Fallback por reglas (offline).
-    action = _rules_interpret(instruction)
-    return action or {"accion": ""}
+    # Fallback por reglas. Si el mensaje trae separadores claros (comillas, saltos,
+    # " y ", ";"), lo partimos PRIMERO para no tragarnos frases ajenas (bug del
+    # "nombre del equipo" que se comía todo). Si no, probamos el mensaje completo.
+    chunks = _split_instructions(instruction)
+    if len(chunks) > 1:
+        out = []
+        for chunk in chunks:
+            a = _rules_interpret(chunk)
+            if a:
+                out.append(a)
+        if out:
+            return out
+    whole = _rules_interpret(instruction)
+    return [whole] if whole else []
+
+
+def interpret_instruction(llm, instruction: str, macro: Macrocycle) -> dict:
+    """Compat: devuelve una sola acción (la primera interpretada)."""
+    acts = interpret_many(llm, instruction, macro)
+    return acts[0] if acts else {"accion": ""}
 
 
 _META_ACTIONS = {"set_team", "set_coach", "set_coordinator", "set_start_date",
@@ -362,23 +435,28 @@ def _apply_meta_action(meta: dict, action: dict) -> tuple[dict, str]:
 
 def edit_macro_from_text(llm, macro: Macrocycle, instruction: str,
                          meta: dict | None = None) -> tuple[Macrocycle, dict, str]:
-    """Interpreta y aplica una instrucción.
+    """Interpreta y aplica una o VARIAS instrucciones de un mismo mensaje.
 
-    Devuelve (macro_nuevo, meta_nuevo, mensaje_es). El macro solo cambia para
-    acciones de carga/objetivo; los metadatos (equipo, fechas, competencias)
-    cambian para acciones de metadatos.
+    Devuelve (macro_nuevo, meta_nuevo, mensaje_es). Aplica cada acción en orden
+    (las de metadatos tocan meta; las de carga/objetivo tocan el macro) y
+    acumula los mensajes de confirmación.
     """
     meta = dict(meta or {})
-    action = interpret_instruction(llm, instruction, macro)
-    kind = action.get("accion", "")
-    if not kind:
+    actions = [a for a in interpret_many(llm, instruction, macro) if a.get("accion")]
+    if not actions:
         return macro, meta, (
             "No pude interpretar la instrucción. Prueba con algo como: "
             "«ponle el nombre del equipo: Club América», «el macro inicia el 10 de agosto de 2026», "
             "«tengo competencia el 20 de agosto vs Cruz Azul», «sube el volumen de la semana 5», "
-            "«marca la semana 8 como descarga».")
-    if kind in _META_ACTIONS:
-        new_meta, msg = _apply_meta_action(meta, action)
-        return macro, new_meta, msg
-    new_macro, msg = apply_action(macro, action)
-    return new_macro, meta, msg
+            "«marca la semana 8 como descarga». Puedes pedir varias cosas a la vez.")
+    messages = []
+    for action in actions:
+        if action.get("accion") in _META_ACTIONS:
+            meta, msg = _apply_meta_action(meta, action)
+        else:
+            macro, msg = apply_action(macro, action)
+        messages.append(msg)
+    # Un solo mensaje si fue una acción; lista con viñetas si fueron varias.
+    if len(messages) == 1:
+        return macro, meta, messages[0]
+    return macro, meta, "Hice " + str(len(messages)) + " cambios:\n• " + "\n• ".join(messages)
