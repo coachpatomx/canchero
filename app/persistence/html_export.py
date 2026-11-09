@@ -250,25 +250,27 @@ _PHASE_INCL = {
 
 
 def _stretch_graphic() -> str:
-    """Imagen genérica (SVG) para el bloque de estiramiento / vuelta a la calma."""
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" '
-        'viewBox="0 0 1000 420" style="width:100%;max-width:430px;height:auto">'
-        '<rect width="1000" height="420" fill="#2e7d32"/>'
-        '<rect x="40" y="40" width="920" height="340" fill="#43a047" stroke="#fff" stroke-width="3"/>'
-        # cuatro figuras simples de personas estirando
-        + "".join(
-            f'<g transform="translate({x},210)">'
-            '<circle cx="0" cy="-70" r="26" fill="#f4c20d" stroke="#1a2a52" stroke-width="4"/>'
-            '<line x1="0" y1="-44" x2="0" y2="30" stroke="#1a2a52" stroke-width="10"/>'
-            '<line x1="0" y1="-20" x2="-38" y2="-50" stroke="#1a2a52" stroke-width="9"/>'
-            '<line x1="0" y1="-20" x2="38" y2="10" stroke="#1a2a52" stroke-width="9"/>'
-            '<line x1="0" y1="30" x2="-30" y2="90" stroke="#1a2a52" stroke-width="9"/>'
-            '<line x1="0" y1="30" x2="34" y2="88" stroke="#1a2a52" stroke-width="9"/>'
+    """Imagen genérica de estiramiento: monitos simples (bolita + palitos)."""
+    def mono(x):
+        # cabeza (bolita) + tronco y extremidades (palitos), estirando brazos arriba
+        return (
+            f'<g transform="translate({x},230)" stroke="#ffffff" stroke-width="5" '
+            'stroke-linecap="round" fill="none">'
+            f'<circle cx="0" cy="-60" r="16" fill="#ffffff" stroke="none"/>'   # cabeza
+            '<line x1="0" y1="-44" x2="0" y2="20"/>'                            # tronco
+            '<line x1="0" y1="-30" x2="-26" y2="-64"/>'                         # brazo izq arriba
+            '<line x1="0" y1="-30" x2="26" y2="-64"/>'                          # brazo der arriba
+            '<line x1="0" y1="20" x2="-20" y2="70"/>'                           # pierna izq
+            '<line x1="0" y1="20" x2="20" y2="70"/>'                            # pierna der
             '</g>'
-            for x in (230, 420, 610, 800)
         )
-        + '<text x="500" y="400" font-size="15" fill="#eafbe9" text-anchor="middle" '
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="360" '
+        'viewBox="0 0 1000 360" style="width:100%;max-width:430px;height:auto">'
+        '<rect width="1000" height="360" fill="#43a047"/>'
+        '<rect x="30" y="30" width="940" height="300" fill="#2e7d32" stroke="#fff" stroke-width="3"/>'
+        + "".join(mono(x) for x in (250, 420, 590, 760))
+        + '<text x="500" y="335" font-size="15" fill="#eafbe9" text-anchor="middle" '
         'font-family="sans-serif">Estiramiento / vuelta a la calma</text>'
         '</svg>'
     )

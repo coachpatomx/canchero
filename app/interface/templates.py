@@ -1010,17 +1010,17 @@ def render_session_interview(answers: dict, question: dict | None,
 </style>
 <div class="ib-wrap">
   <h2 style="font-weight:800">📋 Sesiones</h2>
-  {_recent_sessions_block()}
-  <h3 style="font-weight:800;margin:18px 0 8px">Nueva sesión</h3>
+  <h3 style="font-weight:800;margin:4px 0 8px">Nueva sesión</h3>
   <div class="ib-chat">
     {"".join(bubbles)}
     {panel}
   </div>
   {_classic_session_block(plans)}
+  <div style="margin-top:22px">{_recent_sessions_block()}</div>
   <p><a class="back" href="/">← Inicio</a></p>
 </div>
 """
-    return _page("Sesiones", lang, body, "Tus sesiones y una nueva")
+    return _page("Sesiones", lang, body, "Crea una y revisa las tuyas")
 
 
 def _recent_sessions_block() -> str:

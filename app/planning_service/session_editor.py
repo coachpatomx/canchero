@@ -159,6 +159,13 @@ def _rules_interpret(text: str) -> dict | None:
     if fase and m:
         return {"accion": "set_block_duration", "fase": fase, "min": int(m.group(1))}
 
+    # DIBUJAR un diagrama desde la descripción del entrenador
+    if any(w in t for w in ("dibuja", "dibújame", "dibujame", "diagrama", "esquema",
+                            "gráfica", "grafica", "haz el dibujo", "pinta")):
+        fase = _fase_en(t)
+        # La descripción es todo el texto (el LLM la interpreta).
+        return {"accion": "draw_diagram", "fase": fase, "descripcion": text}
+
     # agregar un EJERCICIO / BLOQUE nuevo (distinto de agregar una variante)
     if (("ejercicio" in t or "bloque" in t or "actividad" in t)
             and any(w in t for w in ("agrega", "añade", "anade", "otro", "otra",
@@ -217,6 +224,7 @@ def _llm_prompt(instruction: str, doc) -> str:
         '  {"accion":"set_block_duration","fase":"calentamiento|parte_principal|juego|vuelta_calma","min":N}\n'
         '  {"accion":"add_variant","fase":"...","texto":"..."}\n'
         '  {"accion":"add_block","tema":"tema del nuevo ejercicio (opcional)"}  (agregar un ejercicio/bloque nuevo)\n'
+        '  {"accion":"draw_diagram","fase":"...","descripcion":"lo que describe el entrenador"}  (dibujar/rehacer el diagrama de un bloque)\n'
         '  {"accion":"set_objective","texto":"..."}\n'
         '  {"accion":"intensify"}  |  {"accion":"soften"}\n'
         '  {"accion":"chat","respuesta":"texto amable"}  (si no es una orden de edición)\n'
@@ -251,10 +259,62 @@ def edit_session_from_text(llm, doc, instruction: str) -> tuple[object, str]:
         action = _rules_interpret(instruction) or {"accion": ""}
     if not action.get("accion"):
         return doc, _GENERIC
-    # add_block necesita el LLM (o un bloque base sin él): se maneja aquí.
+    # add_block y draw_diagram necesitan el LLM: se manejan aquí.
     if action.get("accion") == "add_block":
         return _add_block(llm, doc, action.get("tema", ""), enabled)
+    if action.get("accion") == "draw_diagram":
+        return _draw_diagram(llm, doc, action.get("fase"),
+                             action.get("descripcion", ""), enabled)
     return apply_session_action(doc, action)
+
+
+def _draw_diagram(llm, doc, fase, descripcion: str, enabled: bool) -> tuple[object, str]:
+    """Genera el diagrama de un bloque a partir de la descripción del entrenador.
+    El LLM traduce el texto a elementos (jugadores, conos, flechas, porterías)."""
+    from dataclasses import replace as _replace
+    blocks = _blocks(doc)
+    if not blocks:
+        return doc, ("Primero necesito una sesión con bloques. Crea la sesión y "
+                     "luego te dibujo el ejercicio que describas.")
+    idx = _find_block_index(blocks, fase, None)
+    if idx is None:
+        idx = len(blocks) - 1  # si no especifica fase, el último bloque
+    if not enabled:
+        return doc, ("Para dibujar desde tu descripción necesito OpenAI activo. "
+                     "Actívalo y vuelve a pedírmelo (ej.: «dibuja 5 en una banda y 5 "
+                     "en otra que conducen y dan pase a media cancha»).")
+    prompt = (
+        "Traduce esta descripción de un ejercicio de fútbol a un diagrama JSON. "
+        "Responde SOLO el JSON del diagrama con este esquema (coordenadas en metros, "
+        "origen en la esquina inferior izquierda; el lado largo es ancho_m):\n"
+        '{"ancho_m":40,"alto_m":20,'
+        '"jugadores":[{"x":0,"y":0,"equipo":"a|b","num":1}],'
+        '"conos":[{"x":0,"y":0}],"porterias":[{"x":0,"y":0,"lado":"izq|der"}],'
+        '"balones":[{"x":0,"y":0}],'
+        '"zonas":[{"x":0,"y":0,"w":0,"h":0,"etiqueta":""}],'
+        '"flechas":[{"tipo":"pase|conduccion|carrera","x1":0,"y1":0,"x2":0,"y2":0}]}\n'
+        "Coloca EXACTAMENTE los jugadores que diga la descripción (si dice 5 y 5, "
+        "pon 5 del equipo 'a' y 5 del 'b'), con sus conducciones (flechas tipo "
+        "'conduccion'), pases (tipo 'pase') y carreras (tipo 'carrera') donde "
+        "correspondan. Usa conos/porterías si se mencionan.\n"
+        f'Descripción del entrenador: "{descripcion}"\nJSON:'
+    )
+    try:
+        res = llm.complete(prompt)
+        diag = _parse(getattr(res, "value", "") or "")
+    except Exception:
+        diag = None
+    if not diag or not isinstance(diag, dict) or not any(
+            diag.get(k) for k in ("jugadores", "conos", "flechas", "porterias")):
+        return doc, ("No pude convertir esa descripción en un diagrama. Intenta con "
+                     "algo como: «5 jugadores azules en la banda izquierda conducen y "
+                     "pasan a 5 rojos en media cancha».")
+    blocks[idx]["diagrama"] = diag
+    # Guardar también la descripción como parte del texto del bloque si está vacío.
+    if descripcion and not blocks[idx].get("descripcion"):
+        blocks[idx]["descripcion"] = descripcion
+    return _replace(doc, rich_blocks=tuple(blocks)), \
+        f"Listo: dibujé el diagrama de «{blocks[idx].get('nombre','el bloque')}» según tu descripción."
 
 
 def _add_block(llm, doc, tema: str, enabled: bool) -> tuple[object, str]:
