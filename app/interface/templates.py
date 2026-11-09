@@ -165,6 +165,8 @@ def render_home(history, models, formats, lang: str = "es", llm_on: bool = False
 
 <div class="card">
   <h2>🗓️ Nuevo plan de temporada</h2>
+  <p><a class="btn" href="/plan/new">💬 Crear hablando con el agente (guiado o experto)</a></p>
+  <p class="muted">O usa el formulario clásico de abajo.</p>
   <form method="get" action="/plan">
     <label>Nombre del plan</label>
     <input name="title" placeholder="Ej. Temporada 2026 Ciegos" required>
@@ -642,3 +644,132 @@ def _esc_studio(s: str) -> str:
 def _q(s: str) -> str:
     import urllib.parse
     return urllib.parse.quote(s)
+
+
+# --------------------------------------------------------------------------- #
+# Entrevista conversacional para CREAR un macrociclo (estilo AI-DLC).
+# Modo guiado (pregunta por pregunta, con opciones + explicación + recomendación)
+# o experto (todo de un jalón). Sin estado en servidor: answers viaja en la URL.
+# --------------------------------------------------------------------------- #
+def render_macro_interview(answers: dict, question: dict | None,
+                           mode: str = "guided", lang: str = "es") -> str:
+    import json
+    import urllib.parse
+    from app.planning_service import macro_interview as mi
+
+    answers = answers or {}
+    enc = urllib.parse.quote(json.dumps(answers, ensure_ascii=False))
+
+    # Historial: lo ya respondido como burbujas.
+    bubbles = [
+        '<div class="ib-bot">Vamos a armar tu macrociclo. Te hago unas preguntas '
+        'y al final lo genero. Puedes cambiar al <b>modo experto</b> si prefieres '
+        'escribirlo todo de un jalón.</div>'
+    ]
+    labels = {"team": "Equipo", "format": "Formato", "weeks": "Semanas",
+              "days": "Días/sem", "matches": "Partidos/sem", "start_date": "Inicio",
+              "model": "Modelo", "category": "Categoría"}
+    for k in mi.STEPS:
+        if k in answers and str(answers[k]) != "":
+            val = answers[k]
+            if k == "format":
+                val = next((n for fid, n, _ in mi.FORMATOS if fid == val), val)
+            if k == "model":
+                val = next((n for mid, n, _, _ in mi.MODELOS if mid == val), val)
+            bubbles.append(f'<div class="ib-me">{_esc_studio(labels.get(k,k))}: {_esc_studio(str(val))}</div>')
+
+    # Bloque de la pregunta actual (o el resumen final).
+    if question is None:
+        panel = (
+            '<div class="ib-bot"><b>¡Listo!</b> Esto es lo que capturé:<br>'
+            f'{_esc_studio(mi.summary(answers))}</div>'
+            f'<form method="get" action="/plan/new/create" style="margin-top:10px">'
+            f'<input type="hidden" name="answers" value="{enc}">'
+            f'<button type="submit" style="margin:0">⚡ Generar macrociclo</button></form>'
+        )
+    else:
+        panel = _interview_question_html(question, enc)
+
+    mode_toggle = (
+        f'<div style="margin-bottom:10px;font-size:12px">'
+        f'<a href="/plan/new?mode=guided" style="color:{"#22c55e" if mode!="expert" else "#9fb0c0"};text-decoration:none">● Guiado</a> &nbsp; '
+        f'<a href="/plan/new?mode=expert" style="color:{"#22c55e" if mode=="expert" else "#9fb0c0"};text-decoration:none">● Experto</a>'
+        f'</div>'
+    )
+
+    expert_box = ""
+    if mode == "expert":
+        expert_box = (
+            '<div class="ib-bot">Modo experto: escríbelo todo en una frase. Ej.: '
+            '«Club América ciegos, 20 semanas, 4 días, 1 partido, inicia 10 de agosto de 2026, modelo ATR».</div>'
+            f'<form method="get" action="/plan/new/express" style="display:flex;gap:8px;margin-top:8px">'
+            f'<input name="text" placeholder="Describe el plan completo…" style="flex:1;margin:0" autofocus>'
+            f'<button type="submit" style="margin:0">➤</button></form>'
+        )
+
+    body = f"""
+<style>
+  .ib-wrap {{ max-width:720px; margin:0 auto; }}
+  .ib-chat {{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+              padding:16px; display:flex; flex-direction:column; min-height:440px; }}
+  .ib-bot {{ align-self:flex-start; background:#1b2330; color:var(--ink); padding:10px 14px;
+             border-radius:14px 14px 14px 2px; max-width:86%; margin:5px 0; font-size:14px; line-height:1.5; }}
+  .ib-me {{ align-self:flex-end; background:var(--green); color:#06220f; padding:8px 13px;
+            border-radius:14px 14px 2px 14px; max-width:86%; margin:4px 0; font-size:13px; }}
+  .ib-opts {{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }}
+  .ib-opt {{ background:#0e1116; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+             text-decoration:none; color:var(--ink); font-size:13px; }}
+  .ib-opt:hover {{ border-color:var(--green); }}
+  .ib-opt .d {{ color:var(--muted); font-size:12px; display:block; margin-top:3px; }}
+  .ib-rec {{ background:#13261a; border:1px solid #1f5133; color:#8fe0a8; border-radius:10px;
+             padding:8px 11px; font-size:12px; margin-top:8px; }}
+  .ib-star {{ color:#f9c80e; font-weight:700; }}
+</style>
+<div class="ib-wrap">
+  <h2 style="font-weight:800">🗓️ Nuevo macrociclo</h2>
+  {mode_toggle}
+  <div class="ib-chat">
+    {"".join(bubbles)}
+    {expert_box if mode=="expert" else panel}
+  </div>
+  <p><a class="back" href="/">← Inicio</a></p>
+</div>
+"""
+    return _page("Nuevo macrociclo", lang, body, "Te guío para armarlo")
+
+
+def _interview_question_html(q: dict, enc_answers: str) -> str:
+    """Renderiza la pregunta actual con sus opciones (si las hay)."""
+    out = [f'<div class="ib-bot">{_esc_studio(q["texto"])}</div>']
+    tipo = q.get("tipo")
+    base = f'/plan/new/answer?step={q["id"]}&answers={enc_answers}&value='
+
+    if tipo in ("choice", "choice-rich"):
+        out.append('<div class="ib-opts">')
+        for opt in q.get("opciones", []):
+            import urllib.parse
+            url = base + urllib.parse.quote(str(opt["value"]))
+            star = ' <span class="ib-star">★ recomendado</span>' if opt.get("recomendado") else ""
+            if tipo == "choice-rich":
+                out.append(
+                    f'<a class="ib-opt" href="{url}"><b>{_esc_studio(opt["label"])}</b>{star}'
+                    f'<span class="d">{_esc_studio(opt.get("desc",""))}</span>'
+                    f'<span class="d">👉 {_esc_studio(opt.get("para",""))}</span></a>'
+                )
+            else:
+                out.append(f'<a class="ib-opt" href="{url}">{_esc_studio(opt["label"])}{star}</a>')
+        out.append("</div>")
+    else:
+        # texto / número / fecha -> input libre
+        itype = {"number": "number", "date": "date"}.get(tipo, "text")
+        out.append(
+            f'<form method="get" action="/plan/new/answer" style="display:flex;gap:8px;margin-top:8px">'
+            f'<input type="hidden" name="step" value="{q["id"]}">'
+            f'<input type="hidden" name="answers" value="{enc_answers}">'
+            f'<input name="value" type="{itype}" placeholder="{_esc_studio(q.get("placeholder",""))}" '
+            f'style="flex:1;margin:0" autofocus required>'
+            f'<button type="submit" style="margin:0">➤</button></form>'
+        )
+    if q.get("recomendacion"):
+        out.append(f'<div class="ib-rec">💡 {_esc_studio(q["recomendacion"])}</div>')
+    return "".join(out)

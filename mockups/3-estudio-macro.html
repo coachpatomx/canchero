@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Mock 3 — Estudio</title>
+<style>
+  body{margin:0;background:#0e1116;color:#e7edf3;font-family:'Segoe UI',system-ui,sans-serif;}
+  .top{padding:14px 22px;background:#161b22;border-bottom:1px solid #2a3647;font-weight:800;}
+  .split{display:flex;min-height:520px;flex-wrap:wrap;}
+  .chat{flex:1 1 340px;display:flex;flex-direction:column;border-right:1px solid #2a3647;background:#0e1116;}
+  .chat .hd{padding:12px 16px;border-bottom:1px solid #2a3647;font-weight:700;}
+  .msgs{flex:1;padding:12px 14px;display:flex;flex-direction:column;}
+  .bot{align-self:flex-start;background:#1b2330;padding:9px 13px;border-radius:14px 14px 14px 2px;max-width:85%;margin:5px 0;font-size:13px;}
+  .me{align-self:flex-end;background:#22c55e;color:#06220f;padding:9px 13px;border-radius:14px 14px 2px 14px;max-width:85%;margin:5px 0;font-size:13px;}
+  .inbar{display:flex;gap:8px;padding:12px 14px;border-top:1px solid #2a3647;}
+  .inbar input{flex:1;padding:10px 12px;border:1px solid #2a3647;border-radius:10px;background:#0e1116;color:#e7edf3;}
+  .inbar button{background:#ff7a1a;border:none;color:#0e1116;font-weight:800;border-radius:10px;padding:0 15px;}
+  .prev{flex:2 1 460px;background:#fff;color:#111;}
+  .prevbar{background:#161b22;color:#9fb0c0;font-size:12px;padding:8px 12px;display:flex;justify-content:space-between;}
+  .m{padding:12px;}
+  table{border-collapse:collapse;width:100%;font-size:10px;text-align:center;}
+  td{border:1px solid #9bb0cf;padding:2px;}
+  .lbl{background:#1f3b73;color:#fff;font-weight:700;text-align:left;}
+  .sub{background:#cdd8ec;font-weight:700;}
+</style></head><body>
+<div class="top">🗓️ Estudio · Club América — Ciegos 2026-2</div>
+<div class="split">
+  <div class="chat">
+    <div class="hd">💬 Edita hablando</div>
+    <div class="msgs">
+      <div class="bot">Listo el macro. Dime qué ajustar.</div>
+      <div class="me">sube el volumen de la semana 5 y marca la 8 como descarga</div>
+      <div class="bot">Hice 2 cambios:<br>• volumen de la semana 5 ahora en 60%.<br>• la semana 8 ahora es descarga.</div>
+      <div class="me">pon competencia el 14 de septiembre vs Pumas</div>
+      <div class="bot">✓ Competencia registrada el 14/09 vs Pumas. La marqué en la matriz. →</div>
+    </div>
+    <div class="inbar"><input placeholder="Escribe tu ajuste…"><button>➤</button></div>
+  </div>
+  <div class="prev">
+    <div class="prevbar"><span>Vista previa (se actualiza con cada cambio)</span><span>🖨️ Imprimir · 🏷️ Escudo</span></div>
+    <div class="m">
+      <div style="text-align:center;color:#1f3b73;font-weight:800;margin-bottom:6px">Club América — Ciegos 2026-2</div>
+      <table>
+        <tr><td class="lbl">PERIODO</td><td colspan="5" style="background:#2e7d32;color:#fff;font-weight:700">Preparatorio</td><td colspan="4" style="background:#1565c0;color:#fff;font-weight:700">Competitivo</td></tr>
+        <tr><td class="lbl">MES</td><td colspan="4" class="sub">AGOSTO</td><td colspan="5" class="sub">SEPTIEMBRE</td></tr>
+        <tr><td class="lbl">MICRO</td><td class="sub">M1</td><td class="sub">M2</td><td class="sub">M3</td><td class="sub">M4</td><td class="sub">M5</td><td class="sub">M6</td><td class="sub">M7</td><td class="sub" style="box-shadow:inset 0 0 0 2px #c62828">M8</td><td class="sub">M9</td></tr>
+        <tr><td class="lbl">FECHA</td><td>10a</td><td>17a</td><td>24a</td><td>31a</td><td>07s</td><td>14s</td><td>21s</td><td>28s</td><td>05o</td></tr>
+        <tr><td class="lbl">COMPETENCIA</td><td>&nbsp;</td><td style="background:#c62828;color:#fff;font-size:9px">⚽ Cruz Azul</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td style="background:#c62828;color:#fff;font-size:9px">⚽ Pumas</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td class="lbl">Volumen</td><td>50</td><td>40</td><td>40</td><td>50</td><td style="background:#2e7d32;color:#fff"><b>60↑</b></td><td>50</td><td>40</td><td style="background:#00897b;color:#fff"><b>desc</b></td><td>40</td></tr>
+        <tr><td class="lbl">Resistencia</td><td colspan="9" style="background:#2e7d32">&nbsp;</td></tr>
+        <tr><td class="lbl">Fuerza</td><td colspan="9" style="background:#c62828">&nbsp;</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+</body></html>

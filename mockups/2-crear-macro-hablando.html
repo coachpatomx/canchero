@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Mock 2 — Crear macro (entrevista AI-DLC)</title>
+<style>
+  body{margin:0;background:#0e1116;color:#e7edf3;font-family:'Segoe UI',system-ui,sans-serif;}
+  .wrap{max-width:720px;margin:0 auto;padding:28px 20px;}
+  h1{font-size:22px;font-weight:800;}
+  .mode{font-size:12px;margin-bottom:10px;}
+  .mode a{text-decoration:none;}
+  .chat{background:#161b22;border:1px solid #2a3647;border-radius:16px;padding:16px;display:flex;flex-direction:column;min-height:480px;}
+  .bot{align-self:flex-start;background:#1b2330;padding:10px 14px;border-radius:14px 14px 14px 2px;max-width:86%;margin:6px 0;font-size:14px;line-height:1.5;}
+  .me{align-self:flex-end;background:#22c55e;color:#06220f;padding:8px 13px;border-radius:14px 14px 2px 14px;max-width:86%;margin:4px 0;font-size:13px;}
+  .opts{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+  .opt{background:#0e1116;border:1px solid #2a3647;border-radius:10px;padding:10px 12px;font-size:13px;cursor:pointer;}
+  .opt:hover{border-color:#22c55e;}
+  .opt .d{color:#9fb0c0;font-size:12px;display:block;margin-top:3px;}
+  .star{color:#f9c80e;font-weight:700;}
+  .rec{background:#13261a;border:1px solid #1f5133;color:#8fe0a8;border-radius:10px;padding:8px 11px;font-size:12px;margin-top:8px;}
+</style></head><body>
+<div class="wrap">
+  <h1>🗓️ Nuevo macrociclo</h1>
+  <div class="mode"><a href="#" style="color:#22c55e">● Guiado</a> &nbsp; <a href="#" style="color:#9fb0c0">● Experto</a></div>
+  <div class="chat">
+    <div class="bot">Vamos a armar tu macrociclo. Te hago unas preguntas y al final lo genero. Puedes cambiar a <b>modo experto</b> si prefieres escribirlo todo de un jalón.</div>
+    <div class="me">Equipo: Club América — Ciegos</div>
+    <div class="me">Formato: Fútbol 5 para ciegos ♿</div>
+    <div class="me">Semanas: 20 · 4 días · 1 partido</div>
+    <div class="me">Inicio: 2026-08-10</div>
+    <div class="bot">¿Qué modelo de periodización usamos?
+      <div class="opts">
+        <div class="opt"><b>Tradicional (Matveyev)</b><span class="d">Un gran periodo preparatorio y luego el competitivo.</span><span class="d">👉 Temporadas largas con una competencia principal.</span></div>
+        <div class="opt"><b>ATR (Acumulación–Transformación–Realización)</b> <span class="star">★ recomendado</span><span class="d">Mesociclos cortos que se repiten. Flexible para calendarios con varias competencias.</span><span class="d">👉 Ligas con partidos frecuentes o varios objetivos.</span></div>
+        <div class="opt"><b>Por bloques (Issurin)</b><span class="d">Concentra pocas capacidades por bloque.</span><span class="d">👉 Deportistas ya entrenados que buscan picos de forma.</span></div>
+      </div>
+      <div class="rec">💡 Para tu caso (fútbol para ciegos) recomiendo: ATR.</div>
+    </div>
+  </div>
+  <p style="color:#9fb0c0;font-size:12px;margin-top:10px">El agente te da opciones, explica cada una y marca la recomendada ★. Equipo, fecha y competencias se capturan desde el inicio, dentro de la conversación.</p>
+</div>
+</body></html>

@@ -23,6 +23,7 @@ def _esc_html(s: str) -> str:
 
 from .templates import (
     render_home,
+    render_macro_interview,
     render_plan,
     render_plan_studio,
     render_roster,
@@ -119,6 +120,69 @@ def create_app(service: PlanningService):
     ):
         return _do_create_plan(duration_weeks, training_days_per_week,
                                matches_per_week, model_id, format_id, lang, title, category)
+
+    # ---- Entrevista conversacional para crear el macro (estilo AI-DLC) ---- #
+    import json as _json
+
+    def _decode_answers(s: str) -> dict:
+        try:
+            return _json.loads(s) if s else {}
+        except (ValueError, TypeError):
+            return {}
+
+    @app.get("/plan/new", response_class=HTMLResponse)
+    def plan_new(mode: str = "guided", lang: str = "es"):
+        from app.planning_service import macro_interview as mi
+        answers: dict = {}
+        q = mi.next_question(answers)
+        return HTMLResponse(render_macro_interview(answers, q, mode, lang))
+
+    @app.get("/plan/new/answer", response_class=HTMLResponse)
+    def plan_new_answer(step: str = "", value: str = "", answers: str = "",
+                        mode: str = "guided", lang: str = "es"):
+        from app.planning_service import macro_interview as mi
+        a = _decode_answers(answers)
+        if step:
+            a[step] = value
+        q = mi.next_question(a)
+        return HTMLResponse(render_macro_interview(a, q, mode, lang))
+
+    @app.get("/plan/new/create", response_class=HTMLResponse)
+    def plan_new_create(answers: str = "", lang: str = "es"):
+        from app.planning_service import macro_interview as mi
+        a = _decode_answers(answers)
+        if not mi.is_complete(a):
+            q = mi.next_question(a)
+            return HTMLResponse(render_macro_interview(a, q, "guided", lang))
+        kw = mi.to_plan_input_kwargs(a)
+        meta = kw.pop("_meta", {})
+        resp = _do_create_plan(
+            kw["duration_weeks"], kw["training_days_per_week"], kw["matches_per_week"],
+            kw["model_id"], kw["format_id"], lang, kw["title"], kw["category"],
+        )
+        # Guardar metadatos (equipo, fecha de inicio, competencias) del plan nuevo.
+        pid = _state.get("active_plan_id", "")
+        if pid and meta:
+            try:
+                service.repo.save_plan_meta(pid, meta)
+            except Exception:
+                pass
+        # Llevar directo al estudio (chat + vista previa).
+        if pid:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=f"/plan/{pid}/chat", status_code=303)
+        return resp
+
+    @app.get("/plan/new/express", response_class=HTMLResponse)
+    def plan_new_express(text: str = "", lang: str = "es"):
+        """Modo experto: intenta extraer todo de una frase con el LLM; si no hay
+        LLM o falla, cae a valores razonables y abre la entrevista con lo que pudo."""
+        from app.planning_service import macro_interview as mi
+        a = mi.express_parse(text, service.llm)
+        q = mi.next_question(a)
+        if q is None:  # logró todo -> generar directo
+            return plan_new_create(answers=_json.dumps(a), lang=lang)
+        return HTMLResponse(render_macro_interview(a, q, "expert", lang))
 
     @app.get("/plan/{plan_id}/excel")
     def export_plan_excel(plan_id: str):
