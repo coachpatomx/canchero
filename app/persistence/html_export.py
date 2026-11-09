@@ -419,3 +419,233 @@ def to_html_plan(plan: TrainingPlan, lang: str = "es") -> str:
         f'<!DOCTYPE html><html lang="{lang}"><head><meta charset="utf-8">'
         f"<title>{_esc(title)}</title>{_CSS}</head><body>{body}</body></html>"
     )
+
+
+# --------------------------------------------------------------------------- #
+# MACROCICLO como MATRIZ (estilo planilla de Excel / plantilla del usuario).
+# Adaptable a cualquier nº de semanas y frecuencia de competencia. RF-6.
+# --------------------------------------------------------------------------- #
+_PERIOD_ES = {
+    "preparatory": "Preparatorio", "competitive": "Competitivo", "transition": "Transitorio",
+    "resistance": "Resistencia", "strength": "Fuerza", "speed": "Velocidad", "recovery": "Recuperación",
+}
+_MESOTYPE_ES = {
+    "base": "Base", "development": "Desarrollo", "stabilization": "Estabilización",
+    "competitive": "Competitivo", "recovery": "Recuperación",
+}
+_MICROTYPE_ES = {
+    "introductory": "Introductorio", "developmental": "Desarrollador", "shock": "Choque",
+    "recovery": "Recuperación", "precompetitive": "Precompetitivo", "competition": "Competencia",
+}
+
+# Colores por periodo (banda superior de la matriz).
+_PERIOD_COLOR = {
+    "preparatory": "#2e7d32", "competitive": "#1565c0", "transition": "#f9a825",
+    "resistance": "#2e7d32", "strength": "#6a1b9a", "speed": "#c62828", "recovery": "#00897b",
+}
+
+_CSS_MATRIX = """
+<style>
+  .mtx-wrap { background:#fff; color:#111; padding:16px; overflow-x:auto;
+    font-family:'Segoe UI', Arial, sans-serif; position:relative; }
+  .mtx-wrap * { position:relative; z-index:1; }
+  .mtx-wrap::before { content:""; position:absolute; inset:0; z-index:0;
+    background:url('/static/escudo-club.png') no-repeat center;
+    background-size:min(55%, 520px); opacity:0.08; pointer-events:none; }
+  .mtx-title { text-align:center; color:#1f3b73; font-size:20px; font-weight:800; margin:0 0 10px; }
+  table.mtx { border-collapse:collapse; width:100%; font-size:11px; }
+  table.mtx td, table.mtx th { border:1px solid #9bb0cf; padding:3px 5px; text-align:center;
+    vertical-align:middle; }
+  .mtx-head td { background:#1f3b73; color:#fff; font-weight:700; }
+  .mtx-rowlbl { background:#1f3b73; color:#fff; font-weight:700; text-align:left; width:150px;
+    white-space:nowrap; }
+  .mtx-sub { background:#cdd8ec; font-weight:700; }
+  .mtx-obj td { font-size:10px; text-align:left; vertical-align:top; padding:5px 6px; }
+  .mtx-fill { background:#2e7d32; }
+  @media print {
+    @page { size: landscape; }
+    .mtx-wrap { padding:0; overflow:visible; }
+    table.mtx { font-size:8px; }
+    table.mtx td, table.mtx th { padding:1px 2px; }
+  }
+</style>
+"""
+
+# Capacidades y aspectos que se pintan por microciclo (filas de la matriz).
+_CAP_ROWS = [
+    ("Resistencia", "#2e7d32"), ("Fuerza", "#c62828"), ("Velocidad", "#f9a825"),
+    ("Flexibilidad", "#1565c0"), ("Res. muscular", "#6a1b9a"), ("Potencia", "#00897b"),
+    ("Agilidad", "#e67e22"),
+]
+_ASPECT_ROWS = [
+    ("Técnica", "#f9a825"), ("Táctica", "#1565c0"), ("Tiro a gol", "#c62828"),
+    ("Espacios reducidos / rondos", "#2e7d32"), ("Juegos simulados", "#f9a825"),
+    ("Recreativo", "#8e44ad"), ("Partidos de preparación", "#c62828"),
+]
+
+
+def _vol_band(pct: int, lo: int, hi: int) -> int:
+    """Normaliza el volumen del motor [lo..hi] a la escala visual 50..100% y
+    devuelve la banda (100,90,...,50) más cercana. Así la rejilla se ve como la
+    plantilla (volumen alto arriba al inicio, bajando hacia competencia)."""
+    if hi <= lo:
+        norm = 75
+    else:
+        norm = 50 + (pct - lo) / (hi - lo) * 50  # mapea [lo,hi] -> [50,100]
+    bands = [100, 90, 80, 70, 60, 50]
+    return min(bands, key=lambda b: abs(b - norm))
+
+
+# Objetivo por defecto según el tipo de mesociclo (si el LLM no dio uno).
+_MESO_OBJ_DEFAULT = {
+    "base": "Adaptación anatómica y aeróbica: base física, resistencia y confianza.",
+    "development": "Desarrollo de fuerza general y específica; estabilidad y control.",
+    "stabilization": "Estabilización de cargas; consolidar adaptaciones.",
+    "competitive": "Transformar fuerza en potencia y velocidad; forma competitiva.",
+    "recovery": "Recuperación y descarga; mantener y cerrar el proceso.",
+}
+
+
+def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
+                     team: str = "", coordinator: str = "", coach: str = "",
+                     period_label: str = "") -> str:
+    """Matriz de periodización del macrociclo (planilla tipo Excel).
+
+    Se adapta a cualquier nº de semanas / frecuencia de partidos (no asume un
+    calendario fijo). Las celdas de volumen y capacidades se pintan según las
+    cargas que calculó el motor por microciclo.
+    """
+    macro = plan.macro
+    micros = sorted(
+        [m for meso in macro.mesocycles for m in meso.microcycles],
+        key=lambda m: m.week_index,
+    )
+    n = len(micros)
+    if n == 0:
+        return '<div class="mtx-wrap"><p>El plan no tiene microciclos.</p></div>'
+
+    title = plan.title.es if lang == "es" else plan.title.en
+
+    # --- Fila de PERIODO (colspan por nº de semanas de cada periodo)
+    def _weeks_in(p):
+        return [m for m in micros if p.start_week <= m.week_index <= p.end_week]
+
+    period_cells = []
+    for p in macro.periods:
+        span = len(_weeks_in(p))
+        if span == 0:
+            continue
+        col = _PERIOD_COLOR.get(p.kind.value, "#555")
+        name = _PERIOD_ES.get(p.kind.value, p.kind.value)
+        period_cells.append(
+            f'<td colspan="{span}" style="background:{col};color:#fff;font-weight:700">{name}</td>'
+        )
+
+    # --- Fila de MESOCICLO (colspan por nº de semanas de cada meso)
+    meso_cells = []
+    for i, meso in enumerate(macro.mesocycles, start=1):
+        span = len(meso.microcycles)
+        if span == 0:
+            continue
+        mt = _MESOTYPE_ES.get(meso.type.value, meso.type.value)
+        meso_cells.append(f'<td colspan="{span}" class="mtx-sub">Meso {i} · {mt}</td>')
+
+    # --- Filas de microciclo / semana / partidos
+    micro_hdr = "".join(f'<td class="mtx-sub">M{m.week_index}</td>' for m in micros)
+    week_hdr = "".join(f'<td>{m.week_index}</td>' for m in micros)
+    match_hdr = "".join(
+        f'<td>{"●"*m.matches_this_week if m.matches_this_week else "-"}</td>' for m in micros
+    )
+
+    rows = []
+    rows.append(f'<tr class="mtx-head"><td class="mtx-rowlbl">PERIODO</td>{"".join(period_cells)}</tr>')
+    rows.append(f'<tr><td class="mtx-rowlbl">MESOCICLO</td>{"".join(meso_cells)}</tr>')
+    rows.append(f'<tr><td class="mtx-rowlbl">MICROCICLO</td>{micro_hdr}</tr>')
+    rows.append(f'<tr><td class="mtx-rowlbl">Semana</td>{week_hdr}</tr>')
+    rows.append(f'<tr><td class="mtx-rowlbl">Partidos</td>{match_hdr}</tr>')
+
+    # --- Rejilla de VOLUMEN (100% -> 50%); normalizada al rango real del motor
+    vols = [m.target_volume_pct for m in micros]
+    vlo, vhi = min(vols), max(vols)
+    for band in (100, 90, 80, 70, 60, 50):
+        cells = []
+        for m in micros:
+            on = _vol_band(m.target_volume_pct, vlo, vhi) == band
+            cells.append('<td class="mtx-fill">&nbsp;</td>' if on else '<td>&nbsp;</td>')
+        lbl = "Volumen" if band == 100 else "&nbsp;"
+        rows.append(f'<tr><td class="mtx-rowlbl">{lbl} {band}%</td>{"".join(cells)}</tr>')
+
+    # --- Rejilla de CAPACIDADES (se pinta según la intensidad del micro)
+    def _cap_on(m, idx, total):
+        # Heurística: a mayor intensidad del micro, más capacidades activas.
+        active = max(1, round(m.target_intensity_pct / 100 * total))
+        return idx < active
+
+    for idx, (name, color) in enumerate(_CAP_ROWS):
+        cells = []
+        for m in micros:
+            on = _cap_on(m, idx, len(_CAP_ROWS))
+            cells.append(f'<td style="background:{color}">&nbsp;</td>' if on else '<td>&nbsp;</td>')
+        rows.append(f'<tr><td class="mtx-rowlbl">{name}</td>{"".join(cells)}</tr>')
+
+    # --- Rejilla de ASPECTOS técnico-tácticos (pintado por tipo de microciclo)
+    def _aspect_on(m, idx):
+        t = m.type.value
+        # introductorio/desarrollador -> más técnica/espacios; competencia -> partidos/tiro
+        if t in ("introductory", "developmental"):
+            return idx in (0, 1, 3, 4)
+        if t in ("shock", "precompetitive"):
+            return idx in (1, 2, 3, 6)
+        if t == "competition":
+            return idx in (2, 4, 6)
+        if t == "recovery":
+            return idx in (5,)
+        return idx in (0, 3)
+
+    for idx, (name, color) in enumerate(_ASPECT_ROWS):
+        cells = []
+        for m in micros:
+            on = _aspect_on(m, idx)
+            cells.append(f'<td style="background:{color}">&nbsp;</td>' if on else '<td>&nbsp;</td>')
+        rows.append(f'<tr><td class="mtx-rowlbl">{name}</td>{"".join(cells)}</tr>')
+
+    # --- Encabezado (equipo / coordinador / entrenador / periodo)
+    hdr = (
+        '<table class="mtx" style="margin-bottom:8px">'
+        f'<tr><td class="mtx-rowlbl">EQUIPO</td><td style="text-align:left">{_esc(team) or "&nbsp;"}</td></tr>'
+        f'<tr><td class="mtx-rowlbl">COORDINADOR</td><td style="text-align:left">{_esc(coordinator) or "&nbsp;"}</td></tr>'
+        f'<tr><td class="mtx-rowlbl">ENTRENADOR</td><td style="text-align:left">{_esc(coach) or "&nbsp;"}</td></tr>'
+        f'<tr><td class="mtx-rowlbl">PERIODO</td><td style="text-align:left">{_esc(period_label) or "&nbsp;"}</td></tr>'
+        '</table>'
+    )
+
+    # --- Objetivos por mesociclo (fila de texto largo, como la plantilla)
+    obj_cells = []
+    for meso in macro.mesocycles:
+        span = len(meso.microcycles)
+        if span == 0:
+            continue
+        txt = (" · ".join(meso.objective_focus) if meso.objective_focus
+               else _MESO_OBJ_DEFAULT.get(meso.type.value, "Objetivo del mesociclo."))
+        obj_cells.append(f'<td colspan="{span}" style="text-align:left;font-size:10px">{_esc(txt)}</td>')
+    obj_row = (f'<table class="mtx mtx-obj" style="margin-top:8px">'
+               f'<tr><td class="mtx-rowlbl">OBJETIVO</td>{"".join(obj_cells)}</tr></table>')
+
+    body = (
+        f'<div class="mtx-title">{_esc(title)}</div>'
+        f'{hdr}'
+        f'<table class="mtx">{"".join(rows)}</table>'
+        f'{obj_row}'
+    )
+    return f'<div class="mtx-wrap">{_CSS_MATRIX}{body}</div>'
+
+
+def to_html_plan_matrix(plan: TrainingPlan, lang: str = "es", **meta) -> str:
+    """Documento HTML completo con la matriz del macrociclo (imprimible apaisado)."""
+    title = _esc(plan.title.es if lang == "es" else plan.title.en)
+    body = plan_matrix_html(plan, lang, **meta)
+    return (
+        f'<!DOCTYPE html><html lang="{lang}"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{title}</title></head><body>{body}</body></html>"
+    )

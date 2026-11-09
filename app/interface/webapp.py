@@ -134,6 +134,21 @@ def create_app(service: PlanningService):
             headers={"Content-Disposition": f'attachment; filename="macrociclo-{plan_id}.xlsx"'},
         )
 
+    @app.get("/plan/{plan_id}/matrix", response_class=HTMLResponse)
+    def view_plan_matrix(plan_id: str, lang: str = "es", team: str = "",
+                         coordinator: str = "", coach: str = "", period_label: str = ""):
+        plan = _plans.get(plan_id)
+        if plan is None:
+            res = service.repo.load(plan_id)
+            if isinstance(res, Err):
+                return HTMLResponse("<p>Plan no encontrado</p>", status_code=404)
+            plan = res.value
+            _plans[plan_id] = plan
+        from app.persistence import to_html_plan_matrix
+        html = to_html_plan_matrix(plan, lang, team=team, coordinator=coordinator,
+                                   coach=coach, period_label=period_label)
+        return HTMLResponse(html)
+
     @app.get("/plan/{plan_id}", response_class=HTMLResponse)
     def view_plan(plan_id: str, lang: str = "es"):
         # Consulta un plan del historial: cache en memoria o disco.

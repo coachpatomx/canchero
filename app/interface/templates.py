@@ -312,7 +312,11 @@ def render_plan(plan, lang: str = "es", plan_sessions: list | None = None) -> st
 <div class="card">
   <h2>🏆 {title}</h2>
   <p class="muted">Modelo: <b>{MODEL_ES.get(plan.macro.model_id, plan.macro.model_id)}</b> · Semanas: <b>{plan.macro.total_weeks}</b> · Sesiones: <b>{weeks}</b></p>
-  <p><a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar macrociclo a Excel</a></p>
+  <p>
+    <a class="btn" href="/plan/{plan.id}/matrix" target="_blank">📊 Ver matriz (plantilla)</a>
+    <a class="btn" href="/plan/{plan.id}/excel">⬇ Exportar a Excel</a>
+  </p>
+  <p class="muted">La matriz abre en una pestaña nueva, lista para imprimir o guardar como PDF (apaisado). Desde ahí: Imprimir → Guardar como PDF.</p>
 </div>
 <div class="card">
   <h2>📅 Períodos del macrociclo</h2>
