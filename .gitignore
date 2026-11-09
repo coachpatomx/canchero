@@ -7,6 +7,9 @@
 # Datos del usuario (planes, biblioteca) — respaldo manual por carpeta
 data/
 
+# Paquete ZIP de distribución (se regenera; no versionar)
+*.zip
+
 # Python
 __pycache__/
 *.py[cod]
