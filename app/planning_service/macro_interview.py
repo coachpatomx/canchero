@@ -241,5 +241,8 @@ def to_plan_input_kwargs(answers: dict) -> dict:
             "team": a.get("team", ""),
             "start_date": a.get("start_date", ""),
             "competitions": a.get("competitions", []),
+            "category": ("" if a.get("category") in ("__none__", None) else a.get("category", "")),
+            "coordinator": a.get("coordinator", ""),
+            "coach": a.get("coach", ""),
         },
     }

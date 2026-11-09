@@ -512,7 +512,7 @@ _MESO_OBJ_DEFAULT = {
 def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
                      team: str = "", coordinator: str = "", coach: str = "",
                      period_label: str = "", start_date: str = "",
-                     competitions: list | None = None) -> str:
+                     competitions: list | None = None, category: str = "") -> str:
     """Matriz de periodización del macrociclo (planilla tipo Excel).
 
     Se adapta a cualquier nº de semanas / frecuencia de partidos (no asume un
@@ -534,7 +534,11 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
     if n == 0:
         return '<div class="mtx-wrap"><p>El plan no tiene microciclos.</p></div>'
 
-    title = plan.title.es if lang == "es" else plan.title.en
+    base_title = plan.title.es if lang == "es" else plan.title.en
+    # Título general: "<equipo> — Categoría <cat>" si hay categoría.
+    title = team or base_title
+    if category:
+        title = f"{title} — Categoría {category}"
     competitions = competitions or []
 
     # Mapear cada competencia a la semana del macro (si hay fecha de inicio).
@@ -606,6 +610,22 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
         f'<td>{"●"*m.matches_this_week if m.matches_this_week else "-"}</td>' for m in micros
     )
 
+    # --- Fila de SESIONES: numeración consecutiva de sesiones por microciclo
+    # (como la plantilla: bajo cada micro van sus sesiones 1..N correlativas).
+    sess_cells = []
+    counter = 1
+    for m in micros:
+        n_sess = len(m.session_slots) if m.session_slots else 0
+        if n_sess <= 0:
+            # si el motor no trae slots, estimar por los partidos/semana (mín. 1)
+            n_sess = 3
+        ini = counter
+        fin = counter + n_sess - 1
+        counter = fin + 1
+        rango = f"{ini}" if ini == fin else f"{ini}–{fin}"
+        sess_cells.append(f'<td style="font-size:9px">{rango}</td>')
+    sess_row = f'<tr><td class="mtx-rowlbl">SESIONES</td>{"".join(sess_cells)}</tr>'
+
     # --- Fila de COMPETENCIA: cruza (resalta) la columna de la semana del partido
     comp_row = ""
     if comp_by_week:
@@ -633,6 +653,7 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
     if date_row:
         rows.append(date_row)
     rows.append(f'<tr><td class="mtx-rowlbl">Semana</td>{week_hdr}</tr>')
+    rows.append(sess_row)
     if comp_row:
         rows.append(comp_row)
     rows.append(f'<tr><td class="mtx-rowlbl">Partidos</td>{match_hdr}</tr>')
@@ -682,10 +703,13 @@ def plan_matrix_html(plan: TrainingPlan, lang: str = "es",
             cells.append(f'<td style="background:{color}">&nbsp;</td>' if on else '<td>&nbsp;</td>')
         rows.append(f'<tr><td class="mtx-rowlbl">{name}</td>{"".join(cells)}</tr>')
 
-    # --- Encabezado (equipo / coordinador / entrenador / periodo)
+    # --- Encabezado (equipo/categoría · coordinador · entrenador · periodo)
+    equipo_cat = _esc(team)
+    if category:
+        equipo_cat = (equipo_cat + " — " if equipo_cat else "") + "Categoría " + _esc(category)
     hdr = (
         '<table class="mtx" style="margin-bottom:8px">'
-        f'<tr><td class="mtx-rowlbl">EQUIPO</td><td style="text-align:left">{_esc(team) or "&nbsp;"}</td></tr>'
+        f'<tr><td class="mtx-rowlbl">EQUIPO / CATEGORÍA</td><td style="text-align:left">{equipo_cat or "&nbsp;"}</td></tr>'
         f'<tr><td class="mtx-rowlbl">COORDINADOR</td><td style="text-align:left">{_esc(coordinator) or "&nbsp;"}</td></tr>'
         f'<tr><td class="mtx-rowlbl">ENTRENADOR</td><td style="text-align:left">{_esc(coach) or "&nbsp;"}</td></tr>'
         f'<tr><td class="mtx-rowlbl">PERIODO</td><td style="text-align:left">{_esc(period_label) or "&nbsp;"}</td></tr>'

@@ -227,6 +227,7 @@ def create_app(service: PlanningService):
             period_label=period_label or meta.get("period_label", ""),
             start_date=meta.get("start_date", ""),
             competitions=meta.get("competitions", []),
+            category=meta.get("category", ""),
         )
         return HTMLResponse(html)
 
