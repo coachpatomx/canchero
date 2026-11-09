@@ -179,10 +179,17 @@ def create_app(service: PlanningService):
         LLM o falla, cae a valores razonables y abre la entrevista con lo que pudo."""
         from app.planning_service import macro_interview as mi
         a = mi.express_parse(text, service.llm)
+        # La categoría es opcional: si todo lo demás está, no debe bloquear.
+        if "category" not in a:
+            faltan = [k for k in mi.STEPS if k != "category"
+                      and (a.get(k) in (None, ""))]
+            if not faltan:
+                a["category"] = "__none__"
         q = mi.next_question(a)
         if q is None:  # logró todo -> generar directo
             return plan_new_create(answers=_json.dumps(a), lang=lang)
-        return HTMLResponse(render_macro_interview(a, q, "expert", lang))
+        # Faltó algún dato: continúa la entrevista GUIADA con lo que ya se tiene.
+        return HTMLResponse(render_macro_interview(a, q, "guided", lang))
 
     @app.get("/plan/{plan_id}/excel")
     def export_plan_excel(plan_id: str):
